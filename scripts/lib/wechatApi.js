@@ -6,6 +6,11 @@ const config = require('../../config.json');
 let cachedToken = null;
 let tokenExpiresAt = 0;
 
+function resetAccessToken() {
+  cachedToken = null;
+  tokenExpiresAt = 0;
+}
+
 function getAccessToken() {
   return new Promise((resolve, reject) => {
     if (cachedToken && Date.now() < tokenExpiresAt) {
@@ -122,4 +127,4 @@ function getArticleTotal(startDate, endDate) {
   return apiPost('/datacube/getarticletotal', body);
 }
 
-module.exports = { getAccessToken, apiPost, uploadImage, publishDraft, getArticleTotal };
+module.exports = { getAccessToken, apiPost, uploadImage, publishDraft, getArticleTotal, resetAccessToken };

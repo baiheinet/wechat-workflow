@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WeChat Workflow</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="topbar" role="banner">
+    <div class="brand">
+      <span class="brand-mark">W</span>
+      <span class="brand-name">WeChat Workflow</span>
+    </div>
+    <div class="topbar-status" id="topbar-status" title="后端健康状态">
+      <span class="status-dot" id="status-dot" aria-hidden="true"></span>
+      <span class="status-text" id="status-text">连接中…</span>
+    </div>
+    <div class="topbar-actions">
+      <label class="topbar-field" for="template-select">
+        <span>模板</span>
+        <select id="template-select" aria-label="排版模板"></select>
+      </label>
+      <button id="btn-save" class="btn btn-primary" type="button">保存</button>
+      <button id="btn-convert" class="btn" type="button" title="导出 HTML 到 articles/ready/">导出 HTML</button>
+      <button id="btn-publish" class="btn btn-accent" type="button" title="推送到微信草稿箱">发布</button>
+      <button id="btn-settings" class="btn btn-icon" type="button" aria-label="设置" title="设置">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+          <path fill="currentColor" d="M19.14 12.94a7.14 7.14 0 0 0 .05-.94 7.14 7.14 0 0 0-.05-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.03 7.03 0 0 0-1.63-.94l-.36-2.54A.5.5 0 0 0 13.9 2h-3.84a.5.5 0 0 0-.5.42l-.36 2.54c-.59.24-1.13.55-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.7 8.48a.5.5 0 0 0 .12.64l2.03 1.58a7.14 7.14 0 0 0-.05.94c0 .32.02.63.05.94L2.82 14.16a.5.5 0 0 0-.12.64l1.92 3.32c.14.24.43.34.69.22l2.39-.96c.5.39 1.04.7 1.63.94l.36 2.54c.04.24.25.42.5.42h3.84c.25 0 .46-.18.5-.42l.36-2.54c.59-.24 1.13-.55 1.63-.94l2.39.96c.26.12.55.02.69-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z"/>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="sidebar" aria-label="文章列表">
+      <div class="sidebar-head">
+        <button id="btn-new-article" class="btn btn-block" type="button">+ 新建文章</button>
+        <input id="article-search" class="input" type="search" placeholder="搜索标题/标签" aria-label="搜索文章" />
+        <div class="filter-row" role="tablist" aria-label="状态过滤">
+          <button class="filter-chip is-active" data-filter="all" type="button" role="tab" aria-selected="true">全部</button>
+          <button class="filter-chip" data-filter="draft" type="button" role="tab" aria-selected="false">草稿</button>
+          <button class="filter-chip" data-filter="ready" type="button" role="tab" aria-selected="false">已转换</button>
+          <button class="filter-chip" data-filter="published" type="button" role="tab" aria-selected="false">已发布</button>
+        </div>
+      </div>
+      <ul id="article-list" class="article-list" role="list" aria-label="文章列表"></ul>
+      <div class="sidebar-foot">
+        <span id="article-count">0 篇</span>
+      </div>
+    </aside>
+
+    <section class="editor-pane" aria-label="编辑器">
+      <div class="editor-toolbar" role="toolbar" aria-label="编辑工具栏">
+        <input id="article-title" class="input input-title" type="text" placeholder="文章标题" aria-label="文章标题" />
+        <input id="article-author" class="input" type="text" placeholder="作者" aria-label="作者" />
+        <div class="chip-row" role="group" aria-label="Markdown 格式">
+          <button class="chip" data-md="bold" type="button" title="加粗 (Ctrl+B)">B</button>
+          <button class="chip chip-italic" data-md="italic" type="button" title="斜体 (Ctrl+I)">I</button>
+          <button class="chip" data-md="code" type="button" title="行内代码">‹/›</button>
+          <button class="chip" data-md="link" type="button" title="链接">🔗</button>
+          <button class="chip" data-md="image" type="button" title="图片">🖼</button>
+          <button class="chip" data-md="quote" type="button" title="引用">❝</button>
+          <button class="chip" data-md="list" type="button" title="无序列表">•</button>
+          <button class="chip" data-md="ordered" type="button" title="有序列表">1.</button>
+          <button class="chip" data-md="codeblock" type="button" title="代码块">{}</button>
+          <span class="chip-sep" aria-hidden="true"></span>
+          <button class="chip chip-ai" data-md="cover" type="button" title="AI 生成封面图">🎨 封面</button>
+          <button class="chip chip-ai" data-md="inline" type="button" title="AI 生成插图">🖼 插图</button>
+        </div>
+      </div>
+      <textarea id="editor" class="editor" spellcheck="false" aria-label="Markdown 内容" placeholder="# 标题&#10;&#10;开始写你的公众号文章…"></textarea>
+      <div class="editor-foot">
+        <span id="editor-status" class="muted">未选中文章</span>
+        <span id="editor-words" class="muted">0 字</span>
+      </div>
+    </section>
+
+    <section class="preview-pane" aria-label="微信预览">
+      <div class="preview-head">
+        <span class="preview-title">微信预览</span>
+        <span id="preview-template" class="muted">—</span>
+      </div>
+      <iframe id="preview-frame" class="preview-frame" title="渲染预览" sandbox="allow-same-origin"></iframe>
+    </section>
+  </main>
+
+  <div id="modal-root" class="modal-root" aria-live="polite"></div>
+  <div id="toast-root" class="toast-root" aria-live="polite" aria-atomic="false"></div>
+
+  <template id="tpl-modal">
+    <div class="modal-backdrop" data-modal>
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+        <header class="modal-head">
+          <h2 id="modal-title" class="modal-title">标题</h2>
+          <button class="modal-close" data-action="close" type="button" aria-label="关闭">×</button>
+        </header>
+        <div class="modal-body" data-body></div>
+        <footer class="modal-foot" data-foot></footer>
+      </div>
+    </div>
+  </template>
+
+  <script src="/app.js" defer></script>
+</body>
+</html>
