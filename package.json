@@ -1,0 +1,13 @@
+{
+  "name": "wechat-workflow",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "convert": "node scripts/convert.js",
+    "test": "node scripts/test.js"
+  },
+  "dependencies": {
+    "marked": "^12.0.0",
+    "gray-matter": "^4.0.3"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "name": "tech",
+  "label": "科技风格",
+  "styles": {
+    "body": "font-size:15px;line-height:1.7;color:#333;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;letter-spacing:0.3px;",
+    "h1": "font-size:20px;font-weight:700;color:#1565c0;margin:24px 0 12px;line-height:1.4;border-left:4px solid #1565c0;padding-left:12px;",
+    "h2": "font-size:18px;font-weight:700;color:#1565c0;margin:20px 0 10px;line-height:1.4;border-left:3px solid #42a5f5;padding-left:10px;",
+    "h3": "font-size:16px;font-weight:600;color:#1e88e5;margin:16px 0 8px;line-height:1.4;",
+    "h4": "font-size:15px;font-weight:600;color:#333;margin:12px 0 6px;line-height:1.4;",
+    "p": "font-size:15px;line-height:1.7;color:#333;margin:0 0 12px;",
+    "strong": "font-weight:700;color:#1565c0;",
+    "em": "font-style:italic;color:#555;",
+    "del": "text-decoration:line-through;color:#999;",
+    "a": "color:#1565c0;text-decoration:none;border-bottom:1px solid #1565c0;",
+    "blockquote": "border-left:3px solid #1565c0;padding:10px 16px;margin:12px 0;color:#444;background:#e3f2fd;border-radius:0 4px 4px 0;",
+    "code": "font-size:13px;background:#e8eaf6;padding:2px 6px;border-radius:3px;font-family:'Fira Code',Menlo,monospace;color:#c62828;",
+    "pre": "background:#1e1e1e;padding:14px 18px;border-radius:4px;overflow-x:auto;margin:12px 0;font-size:13px;line-height:1.6;",
+    "pre_code": "background:transparent;padding:0;border-radius:0;color:#d4d4d4;font-size:13px;font-family:'Fira Code',Menlo,monospace;",
+    "ul": "margin:8px 0;padding-left:20px;",
+    "ol": "margin:8px 0;padding-left:20px;",
+    "li": "font-size:15px;line-height:1.7;color:#333;margin:4px 0;",
+    "img": "max-width:100%;height:auto;display:block;margin:12px auto;border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,0.1);",
+    "hr": "border:none;border-top:2px solid #1565c0;margin:24px 0;",
+    "table": "width:100%;border-collapse:collapse;margin:12px 0;font-size:14px;border:1px solid #ddd;",
+    "th": "background:#1565c0;padding:8px 12px;border:1px solid #1565c0;font-weight:600;text-align:left;color:#fff;",
+    "td": "padding:8px 12px;border:1px solid #ddd;text-align:left;"
+  }
+}

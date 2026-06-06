@@ -1,0 +1,9 @@
+{
+  "default_template": "minimal",
+  "output_dir": "articles/ready",
+  "image_strategy": "local-warn",
+  "wechat": {
+    "app_id": "",
+    "app_secret": ""
+  }
+}
