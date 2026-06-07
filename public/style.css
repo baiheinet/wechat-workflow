@@ -340,12 +340,27 @@ input, textarea, select { font: inherit; color: inherit; }
 .article-status.is-published { background: var(--accent-soft); color: var(--accent); }
 
 .sidebar-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   padding: 8px 14px;
   border-top: 1px solid var(--border-soft);
   font-size: 11px;
   color: var(--fg-muted);
   background: var(--bg-soft);
 }
+.sidebar-foot-spacer { flex: 1; }
+.status-dot-small {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--fg-muted);
+  flex-shrink: 0;
+}
+.status-dot-small.is-ok { background: var(--success); }
+.status-dot-small.is-down { background: var(--danger); }
+.status-dot-small.is-warn { background: var(--warning, #e6a23c); }
 
 .editor-pane {
   display: flex;

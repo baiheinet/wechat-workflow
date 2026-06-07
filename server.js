@@ -10,15 +10,42 @@ const { generateCover, generateInline, getApiKey } = require('./scripts/lib/imag
 const wechatApi = require('./scripts/lib/wechatApi');
 
 const ROOT = __dirname;
-const CONFIG_PATH = path.join(ROOT, 'config.json');
-const DRAFTS_DIR = path.join(ROOT, 'articles', 'drafts');
-const READY_DIR = path.join(ROOT, 'articles', 'ready');
-const PUBLISHED_DIR = path.join(ROOT, 'articles', 'published');
+const DATA_DIR = process.env.VERCEL ? '/tmp/wechat-workflow' : ROOT;
+if (process.env.VERCEL) process.env.DATA_DIR = DATA_DIR;
+const DATA_SRC = ROOT;
+const CONFIG_PATH = path.join(DATA_DIR, 'config.json');
+const CONFIG_SRC = path.join(DATA_SRC, 'config.json');
+const DRAFTS_DIR = path.join(DATA_DIR, 'articles', 'drafts');
+const DRAFTS_SRC = path.join(DATA_SRC, 'articles', 'drafts');
+const READY_DIR = path.join(DATA_DIR, 'articles', 'ready');
+const PUBLISHED_DIR = path.join(DATA_DIR, 'articles', 'published');
 const PUBLIC_DIR = path.join(ROOT, 'public');
 
-for (const d of [DRAFTS_DIR, READY_DIR, PUBLISHED_DIR]) {
-  fs.mkdirSync(d, { recursive: true });
+function ensureDataDirs() {
+  fs.mkdirSync(DRAFTS_DIR, { recursive: true });
+  fs.mkdirSync(READY_DIR, { recursive: true });
+  fs.mkdirSync(PUBLISHED_DIR, { recursive: true });
 }
+
+function bootstrapData() {
+  ensureDataDirs();
+  if (DATA_DIR !== ROOT) {
+    if (!fs.existsSync(CONFIG_PATH) && fs.existsSync(CONFIG_SRC)) {
+      fs.copyFileSync(CONFIG_SRC, CONFIG_PATH);
+    }
+    if (fs.existsSync(DRAFTS_SRC)) {
+      for (const f of fs.readdirSync(DRAFTS_SRC)) {
+        const src = path.join(DRAFTS_SRC, f);
+        const dst = path.join(DRAFTS_DIR, f);
+        if (!fs.existsSync(dst) && f.endsWith('.md')) {
+          fs.copyFileSync(src, dst);
+        }
+      }
+    }
+    listTemplates();
+  }
+}
+bootstrapData();
 
 const CONFIG_FIELDS = {
   default_template: { type: 'string', default: 'minimal' },
@@ -120,6 +147,9 @@ function updateConfig(partial) {
   const current = readConfig();
   applyConfigUpdate(current, partial, CONFIG_FIELDS);
   fs.writeFileSync(CONFIG_PATH, JSON.stringify(current, null, 2) + '\n', 'utf-8');
+  const srcPath = path.resolve(ROOT, 'config.json');
+  const cached = require.cache[srcPath];
+  if (cached) Object.assign(cached.exports, current);
   wechatApi.resetAccessToken();
   return current;
 }
@@ -437,7 +467,14 @@ app.post('/api/generate-image', async (req, res) => {
   }
 });
 
-app.use('/assets', express.static(path.join(ROOT, 'assets'), { maxAge: '1h' }));
+const ASSETS_DIRS = DATA_DIR !== ROOT
+  ? [path.join(DATA_DIR, 'assets'), path.join(ROOT, 'assets')]
+  : [path.join(ROOT, 'assets')];
+for (const d of ASSETS_DIRS) {
+  if (fs.existsSync(d)) {
+    app.use('/assets', express.static(d, { maxAge: '1h' }));
+  }
+}
 app.use(express.static(PUBLIC_DIR, { maxAge: '1h' }));
 
 app.get(/^\/(?!api).*/, (req, res, next) => {

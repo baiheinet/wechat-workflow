@@ -187,6 +187,14 @@
     if (kind === 'ok') dot.classList.add('is-ok');
     else if (kind === 'down') dot.classList.add('is-down');
     t.textContent = text;
+    const sdot = $('#health-dot');
+    const st = $('#health-text');
+    if (sdot) { sdot.classList.remove('is-ok', 'is-down', 'is-warn');
+      if (kind === 'ok') sdot.classList.add('is-ok');
+      else if (kind === 'down') sdot.classList.add('is-down');
+      else sdot.classList.add('is-warn');
+    }
+    if (st) st.textContent = text;
   }
 
   function formatDate(iso) {
@@ -811,7 +819,14 @@
       api.getConfig().catch(() => null),
       api.listArticles().catch(() => [])
     ]).then(([health, templates, configRes, articles]) => {
-      setStatus('ok', '已连接');
+      const wechatOk = configRes?.summary?.wechat_configured || health?.wechatConfigured;
+      const imgOk = configRes?.summary?.imageGen_configured || health?.imageGenConfigured;
+      const parts = [];
+      if (wechatOk) parts.push('微信已配置');
+      else parts.push('微信未配置');
+      if (imgOk) parts.push('AI 配图已配置');
+      else parts.push('AI 配图未配置');
+      setStatus('ok', parts.join(' · '));
       state.templates = templates;
       state.config = configRes?.config;
       state.summary = configRes?.summary || health;

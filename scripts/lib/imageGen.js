@@ -85,9 +85,11 @@ function buildPrompt(template, type, title, description) {
   return `${description || title || 'Article illustration'}, ${style}, illustration style, high quality`;
 }
 
+const DATA_BASE = process.env.DATA_DIR || path.resolve(__dirname, '../..');
+
 function generateCover(title, description, template) {
   const prompt = buildPrompt(template, 'cover', title, description);
-  const outDir = path.resolve(__dirname, '../../assets/covers');
+  const outDir = path.join(DATA_BASE, 'assets', 'covers');
   fs.mkdirSync(outDir, { recursive: true });
   return generate(prompt, { size: '1024x768' }).then(result => {
     const ext = path.extname(new URL(result.url).pathname) || '.png';
@@ -102,7 +104,7 @@ function generateCover(title, description, template) {
 
 function generateInline(description, template) {
   const prompt = buildPrompt(template, 'inline', '', description);
-  const outDir = path.resolve(__dirname, '../../assets/images');
+  const outDir = path.join(DATA_BASE, 'assets', 'images');
   fs.mkdirSync(outDir, { recursive: true });
   return generate(prompt, { size: '1024x768' }).then(result => {
     const ext = path.extname(new URL(result.url).pathname) || '.png';
