@@ -2,16 +2,17 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const fsp = require('fs/promises');
+
+const ROOT = __dirname;
+const DATA_DIR = process.env.VERCEL ? '/tmp/wechat-workflow' : ROOT;
+if (process.env.VERCEL) process.env.DATA_DIR = DATA_DIR;
+
 const matter = require('gray-matter');
 const { render } = require('./scripts/lib/markdownToHtml');
 const { handleImages } = require('./scripts/lib/imageHandler');
 const { listTemplates } = require('./scripts/lib/templateLoader');
 const { generateCover, generateInline, getApiKey } = require('./scripts/lib/imageGen');
 const wechatApi = require('./scripts/lib/wechatApi');
-
-const ROOT = __dirname;
-const DATA_DIR = process.env.VERCEL ? '/tmp/wechat-workflow' : ROOT;
-if (process.env.VERCEL) process.env.DATA_DIR = DATA_DIR;
 const DATA_SRC = ROOT;
 const CONFIG_PATH = path.join(DATA_DIR, 'config.json');
 const CONFIG_SRC = path.join(DATA_SRC, 'config.json');
