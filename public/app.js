@@ -107,6 +107,17 @@
     convert(payload) { return this._fetch('/api/convert', { method: 'POST', body: JSON.stringify(payload) }); },
     publish(payload) { return this._fetch('/api/publish', { method: 'POST', body: JSON.stringify(payload) }); },
     generateImage(payload) { return this._fetch('/api/generate-image', { method: 'POST', body: JSON.stringify(payload) }); },
+    listAssets(params) {
+      const qs = params ? '?' + new URLSearchParams(params).toString() : '';
+      return this._fetch('/api/assets' + qs);
+    },
+    getAsset(id) { return this._fetch(`/api/assets/${encodeURIComponent(id)}`); },
+    createLinkAsset(payload) { return this._fetch('/api/assets', { method: 'POST', body: JSON.stringify({ ...payload, type: 'link' }) }); },
+    createNoteAsset(payload) { return this._fetch('/api/assets', { method: 'POST', body: JSON.stringify({ ...payload, type: 'note' }) }); },
+    createFileAsset(payload) { return this._fetch('/api/assets', { method: 'POST', body: JSON.stringify({ ...payload, type: 'file' }) }); },
+    uploadFile(payload) { return this._fetch('/api/assets/upload', { method: 'POST', body: JSON.stringify(payload) }); },
+    updateAsset(id, payload) { return this._fetch(`/api/assets/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(payload) }); },
+    deleteAsset(id) { return this._fetch(`/api/assets/${encodeURIComponent(id)}`, { method: 'DELETE' }); },
     getStats(params) {
       const qs = params ? '?' + new URLSearchParams(params).toString() : '';
       return this._fetch('/api/stats' + qs);
@@ -993,6 +1004,633 @@
     toast(`已插入${type === 'cover' ? '封面' : '插图'}: ${result.path}`, 'success');
   }
 
+  function assetToMarkdown(asset) {
+    if (!asset) return '';
+    if (asset.type === 'link') {
+      return `[${asset.title || asset.url}](${asset.url})`;
+    }
+    if (asset.type === 'file') {
+      const isImage = (asset.contentType || '').startsWith('image/');
+      return isImage
+        ? `![${asset.title || 'image'}](${asset.url})`
+        : `[${asset.title || asset.filename || 'file'}](${asset.url})`;
+    }
+    if (asset.type === 'note') {
+      const body = String(asset.content || '').trim();
+      if (!body) return '';
+      return body.split('\n').map(line => `> ${line}`).join('\n');
+    }
+    return '';
+  }
+
+  function insertAsset(asset) {
+    const md = assetToMarkdown(asset);
+    if (!md) {
+      toast('该素材没有可插入的内容', 'warn');
+      return;
+    }
+    const ta = $('#editor');
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    const before = ta.value.slice(0, start);
+    const after = ta.value.slice(end);
+    const needsLeadingNewline = before.length > 0 && !before.endsWith('\n');
+    const needsTrailingNewline = after.length > 0 && !after.startsWith('\n');
+    const block = asset.type === 'note';
+    const inserted = `${needsLeadingNewline ? '\n' : ''}${md}${(block || needsTrailingNewline) ? '\n' : ''}`;
+    ta.value = before + inserted + after;
+    const cursor = (before + inserted).length;
+    ta.focus();
+    ta.setSelectionRange(cursor, cursor);
+    markDirty();
+    const typeLabel = asset.type === 'link' ? '链接' : asset.type === 'file' ? '文件' : '笔记';
+    toast(`已插入${typeLabel}: ${asset.title || asset.filename || asset.url || ''}`, 'success');
+  }
+
+  function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = String(reader.result || '');
+        const comma = result.indexOf(',');
+        resolve(comma >= 0 ? result.slice(comma + 1) : result);
+      };
+      reader.onerror = () => reject(reader.error || new Error('读取文件失败'));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function openAssetManager() {
+    const body = document.createElement('div');
+    body.className = 'asset-manager';
+
+    const tabs = document.createElement('div');
+    tabs.className = 'asset-tabs';
+    const tabDefs = [
+      { type: 'link', label: '🔗 链接' },
+      { type: 'file', label: '📎 文件' },
+      { type: 'note', label: '📝 笔记' }
+    ];
+    const tabButtons = {};
+    for (const t of tabDefs) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'asset-tab';
+      btn.textContent = t.label;
+      btn.dataset.type = t.type;
+      tabs.appendChild(btn);
+      tabButtons[t.type] = btn;
+    }
+    body.appendChild(tabs);
+
+    const filterRow = document.createElement('div');
+    filterRow.className = 'asset-filters';
+    const searchInput = document.createElement('input');
+    searchInput.className = 'input';
+    searchInput.type = 'search';
+    searchInput.placeholder = '搜索标题 / 链接 / 笔记内容…';
+    const catSelect = document.createElement('select');
+    catSelect.className = 'input';
+    const catDefault = document.createElement('option');
+    catDefault.value = '';
+    catDefault.textContent = '全部分类';
+    catSelect.appendChild(catDefault);
+    const scopeSelect = document.createElement('select');
+    scopeSelect.className = 'input';
+    const scopeAll = document.createElement('option');
+    scopeAll.value = '';
+    scopeAll.textContent = '所有文章';
+    scopeSelect.appendChild(scopeAll);
+    if (state.activeSlug) {
+      const opt = document.createElement('option');
+      opt.value = state.activeSlug;
+      opt.textContent = `仅当前: ${state.activeSlug}`;
+      scopeSelect.appendChild(opt);
+      scopeSelect.value = state.activeSlug;
+    }
+    filterRow.append(searchInput, catSelect, scopeSelect);
+    body.appendChild(filterRow);
+
+    const listEl = document.createElement('div');
+    listEl.className = 'asset-list';
+    body.appendChild(listEl);
+
+    const createBar = document.createElement('div');
+    createBar.className = 'asset-create-bar';
+    body.appendChild(createBar);
+
+    const foot = document.createElement('div');
+    foot.style.display = 'flex';
+    foot.style.gap = '8px';
+    foot.style.justifyContent = 'flex-end';
+    const refreshBtn = document.createElement('button');
+    refreshBtn.className = 'btn';
+    refreshBtn.type = 'button';
+    refreshBtn.textContent = '刷新';
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'btn';
+    closeBtn.type = 'button';
+    closeBtn.textContent = '关闭';
+    foot.append(refreshBtn, closeBtn);
+
+    const p = modal({ title: '📂 素材管理器', body, footer: foot, width: '780px' });
+    closeBtn.onclick = () => p.close(null);
+    refreshBtn.onclick = () => loadList();
+
+    let activeType = 'link';
+    let allLoaded = [];
+    let lastReq = 0;
+
+    function setActiveType(type) {
+      activeType = type;
+      for (const [k, btn] of Object.entries(tabButtons)) {
+        btn.classList.toggle('is-active', k === type);
+      }
+      renderCreateBar();
+      loadList();
+    }
+
+    function renderCreateBar() {
+      createBar.innerHTML = '';
+      if (activeType === 'link') {
+        const btn = document.createElement('button');
+        btn.className = 'btn btn-primary';
+        btn.type = 'button';
+        btn.textContent = '+ 新建链接';
+        btn.onclick = openCreateLink;
+        createBar.appendChild(btn);
+      } else if (activeType === 'note') {
+        const btn = document.createElement('button');
+        btn.className = 'btn btn-primary';
+        btn.type = 'button';
+        btn.textContent = '+ 新建笔记';
+        btn.onclick = openCreateNote;
+        createBar.appendChild(btn);
+      } else if (activeType === 'file') {
+        const hint = document.createElement('span');
+        hint.className = 'field-hint';
+        hint.textContent = '在下方上传文件，文件会保存到素材库，可直接插入到编辑器。';
+        createBar.appendChild(hint);
+        const btn = document.createElement('button');
+        btn.className = 'btn btn-primary';
+        btn.type = 'button';
+        btn.textContent = '⬆ 上传文件';
+        btn.onclick = openFilePicker;
+        createBar.appendChild(btn);
+      }
+    }
+
+    function renderList(items) {
+      listEl.innerHTML = '';
+      if (!items.length) {
+        const empty = document.createElement('div');
+        empty.className = 'asset-empty';
+        empty.textContent = activeType === 'link'
+          ? '暂无链接，点击「+ 新建链接」开始收集。'
+          : activeType === 'note'
+            ? '暂无笔记，点击「+ 新建笔记」开始记录。'
+            : '暂无文件，点击「⬆ 上传文件」添加图片 / 文档。';
+        listEl.appendChild(empty);
+        return;
+      }
+      for (const a of items) {
+        listEl.appendChild(renderItem(a));
+      }
+    }
+
+    function renderItem(a) {
+      const item = document.createElement('div');
+      item.className = 'asset-item';
+
+      const head = document.createElement('div');
+      head.className = 'asset-item-head';
+      const title = document.createElement('div');
+      title.className = 'asset-item-title';
+      title.textContent = a.title || a.filename || a.url || '(无标题)';
+      head.appendChild(title);
+      const badge = document.createElement('span');
+      badge.className = `asset-badge is-${a.type}`;
+      badge.textContent = a.type === 'link' ? '链接' : a.type === 'file' ? '文件' : '笔记';
+      head.appendChild(badge);
+      item.appendChild(head);
+
+      const meta = document.createElement('div');
+      meta.className = 'asset-item-meta';
+      const parts = [];
+      if (a.category) parts.push(`📁 ${a.category}`);
+      if (a.article_slug) parts.push(`📄 ${a.article_slug}`);
+      if (a.tags && a.tags.length) parts.push(a.tags.map(t => `#${t}`).join(' '));
+      if (a.type === 'file' && a.size) parts.push(formatBytes(a.size));
+      if (a.updatedAt) parts.push(formatDate(a.updatedAt));
+      meta.textContent = parts.join(' · ') || '—';
+      item.appendChild(meta);
+
+      const preview = document.createElement('div');
+      preview.className = 'asset-item-preview';
+      if (a.type === 'file' && (a.contentType || '').startsWith('image/')) {
+        const img = document.createElement('img');
+        img.src = a.url;
+        img.alt = a.title || 'asset';
+        img.className = 'asset-item-thumb';
+        preview.appendChild(img);
+      } else if (a.type === 'link' && a.url) {
+        const aEl = document.createElement('a');
+        aEl.href = a.url;
+        aEl.target = '_blank';
+        aEl.rel = 'noopener noreferrer';
+        aEl.textContent = a.url;
+        aEl.className = 'asset-item-link';
+        preview.appendChild(aEl);
+      } else if (a.type === 'note' && a.content) {
+        const text = document.createElement('div');
+        text.className = 'asset-item-note';
+        text.textContent = a.content.length > 220 ? a.content.slice(0, 220) + '…' : a.content;
+        preview.appendChild(text);
+      }
+      if (preview.childElementCount) item.appendChild(preview);
+
+      const actions = document.createElement('div');
+      actions.className = 'asset-item-actions';
+      const insertBtn = document.createElement('button');
+      insertBtn.className = 'btn btn-primary';
+      insertBtn.type = 'button';
+      insertBtn.textContent = '插入到编辑器';
+      insertBtn.onclick = () => { insertAsset(a); p.close(true); };
+      actions.appendChild(insertBtn);
+      const editBtn = document.createElement('button');
+      editBtn.className = 'btn';
+      editBtn.type = 'button';
+      editBtn.textContent = '编辑';
+      editBtn.onclick = () => openEdit(a);
+      actions.appendChild(editBtn);
+      const delBtn = document.createElement('button');
+      delBtn.className = 'btn btn-danger';
+      delBtn.type = 'button';
+      delBtn.textContent = '删除';
+      delBtn.onclick = () => {
+        confirmDialog(`确定删除素材「${a.title || a.filename || a.url || a.id}」？此操作不可撤销。`, { title: '删除素材', danger: true, okText: '删除' })
+          .then(ok => {
+            if (!ok) return null;
+            return api.deleteAsset(a.id);
+          })
+          .then(res => {
+            if (res) {
+              toast('已删除', 'success');
+              loadList();
+            }
+          })
+          .catch(err => toast(`删除失败: ${err.message}`, 'error'));
+      };
+      actions.appendChild(delBtn);
+      item.appendChild(actions);
+      return item;
+    }
+
+    function formatBytes(n) {
+      if (!n) return '0 B';
+      if (n < 1024) return `${n} B`;
+      if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+      return `${(n / 1024 / 1024).toFixed(2)} MB`;
+    }
+
+    function getFilters() {
+      return {
+        type: activeType,
+        q: searchInput.value.trim(),
+        category: catSelect.value,
+        article_slug: scopeSelect.value
+      };
+    }
+
+    function refreshCategories(items) {
+      const current = catSelect.value;
+      const cats = new Set();
+      for (const a of items) if (a.category) cats.add(a.category);
+      catSelect.innerHTML = '';
+      const all = document.createElement('option');
+      all.value = '';
+      all.textContent = '全部分类';
+      catSelect.appendChild(all);
+      for (const c of Array.from(cats).sort()) {
+        const opt = document.createElement('option');
+        opt.value = c;
+        opt.textContent = c;
+        catSelect.appendChild(opt);
+      }
+      if (current && cats.has(current)) catSelect.value = current;
+    }
+
+    function loadList() {
+      const myReq = ++lastReq;
+      const filters = getFilters();
+      const params = { type: filters.type };
+      if (filters.q) params.q = filters.q;
+      if (filters.category) params.category = filters.category;
+      if (filters.article_slug) params.article_slug = filters.article_slug;
+      api.listAssets(params).then(items => {
+        if (myReq !== lastReq) return;
+        allLoaded = items;
+        renderList(items);
+      }).catch(err => {
+        if (myReq !== lastReq) return;
+        if (err.status === 503 || /Blob Storage not configured/.test(err.message || '')) {
+          renderList([]);
+          const empty = document.createElement('div');
+          empty.className = 'gen-error';
+          empty.textContent = '素材库需要先配置 Blob Storage（设置 BLOB_READ_WRITE_TOKEN 或 BLOB_STORE_ID 环境变量）。';
+          listEl.innerHTML = '';
+          listEl.appendChild(empty);
+          return;
+        }
+        toast(`加载素材失败: ${err.message}`, 'error');
+        renderList([]);
+      });
+      if (allLoaded.length === 0) {
+        api.listAssets({}).then(all => {
+          if (myReq !== lastReq) return;
+          refreshCategories(all);
+        }).catch(() => {});
+      } else {
+        refreshCategories(allLoaded);
+      }
+    }
+
+    function openCreateLink() {
+      const local = document.createElement('div');
+      const urlRow = buildField({ name: 'url', label: '链接 URL', placeholder: 'https://…', required: true });
+      const titleRow = buildField({ name: 'title', label: '标题', placeholder: '可选；留空则用 URL' });
+      const catRow = buildField({ name: 'category', label: '分类', placeholder: '例如：参考 / 工具' });
+      const tagsRow = buildField({ name: 'tags', label: '标签（逗号分隔）', placeholder: '可选' });
+      const articleRow = document.createElement('div');
+      articleRow.className = 'form-row';
+      const lbl = document.createElement('label');
+      lbl.textContent = '关联文章';
+      articleRow.appendChild(lbl);
+      const articleSel = document.createElement('select');
+      const noneOpt = document.createElement('option');
+      noneOpt.value = '';
+      noneOpt.textContent = '（不关联）';
+      articleSel.appendChild(noneOpt);
+      for (const a of state.articles) {
+        const opt = document.createElement('option');
+        opt.value = a.slug;
+        opt.textContent = a.title || a.slug;
+        articleSel.appendChild(opt);
+      }
+      if (state.activeSlug) articleSel.value = state.activeSlug;
+      articleRow.appendChild(articleSel);
+      local.append(urlRow, titleRow, catRow, tagsRow, articleRow);
+
+      const subFoot = document.createElement('div');
+      subFoot.style.display = 'flex';
+      subFoot.style.gap = '8px';
+      subFoot.style.justifyContent = 'flex-end';
+      const cancel = document.createElement('button');
+      cancel.className = 'btn';
+      cancel.type = 'button';
+      cancel.textContent = '取消';
+      const save = document.createElement('button');
+      save.className = 'btn btn-primary';
+      save.type = 'button';
+      save.textContent = '保存';
+      subFoot.append(cancel, save);
+
+      const sub = modal({ title: '新建链接', body: local, footer: subFoot, width: '480px' });
+      cancel.onclick = () => sub.close(null);
+      save.onclick = async () => {
+        const url = local.querySelector('input[name="url"]').value.trim();
+        if (!url) { toast('URL 必填', 'warn'); return; }
+        const title = local.querySelector('input[name="title"]').value.trim();
+        const category = local.querySelector('input[name="category"]').value.trim();
+        const tags = local.querySelector('input[name="tags"]').value.split(/[,，]/).map(s => s.trim()).filter(Boolean);
+        save.disabled = true;
+        try {
+          await api.createLinkAsset({ url, title, category, tags, article_slug: articleSel.value });
+          toast('已保存', 'success');
+          sub.close(true);
+          loadList();
+        } catch (err) {
+          toast(`保存失败: ${err.message}`, 'error');
+        } finally {
+          save.disabled = false;
+        }
+      };
+    }
+
+    function openCreateNote() {
+      const local = document.createElement('div');
+      const titleRow = buildField({ name: 'title', label: '标题', placeholder: '可选' });
+      const noteLbl = document.createElement('label');
+      noteLbl.textContent = '笔记内容';
+      noteLbl.style.fontSize = '12px';
+      noteLbl.style.fontWeight = '600';
+      noteLbl.style.color = 'var(--fg-soft)';
+      local.appendChild(titleRow);
+      const ta = document.createElement('textarea');
+      ta.name = 'content';
+      ta.rows = 8;
+      ta.placeholder = '记录一段摘录、心得或要点…';
+      ta.style.cssText = 'width:100%;font-family:var(--mono);font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--fg);resize:vertical;';
+      const wrap = document.createElement('div');
+      wrap.className = 'form-row';
+      wrap.appendChild(noteLbl);
+      wrap.appendChild(ta);
+      local.appendChild(wrap);
+      const catRow = buildField({ name: 'category', label: '分类', placeholder: '例如：灵感 / 论据' });
+      const tagsRow = buildField({ name: 'tags', label: '标签（逗号分隔）', placeholder: '可选' });
+      const articleRow = document.createElement('div');
+      articleRow.className = 'form-row';
+      const lbl = document.createElement('label');
+      lbl.textContent = '关联文章';
+      articleRow.appendChild(lbl);
+      const articleSel = document.createElement('select');
+      const noneOpt = document.createElement('option');
+      noneOpt.value = '';
+      noneOpt.textContent = '（不关联）';
+      articleSel.appendChild(noneOpt);
+      for (const a of state.articles) {
+        const opt = document.createElement('option');
+        opt.value = a.slug;
+        opt.textContent = a.title || a.slug;
+        articleSel.appendChild(opt);
+      }
+      if (state.activeSlug) articleSel.value = state.activeSlug;
+      articleRow.appendChild(articleSel);
+      local.append(catRow, tagsRow, articleRow);
+
+      const subFoot = document.createElement('div');
+      subFoot.style.display = 'flex';
+      subFoot.style.gap = '8px';
+      subFoot.style.justifyContent = 'flex-end';
+      const cancel = document.createElement('button');
+      cancel.className = 'btn';
+      cancel.type = 'button';
+      cancel.textContent = '取消';
+      const save = document.createElement('button');
+      save.className = 'btn btn-primary';
+      save.type = 'button';
+      save.textContent = '保存';
+      subFoot.append(cancel, save);
+
+      const sub = modal({ title: '新建笔记', body: local, footer: subFoot, width: '520px' });
+      cancel.onclick = () => sub.close(null);
+      save.onclick = async () => {
+        const title = local.querySelector('input[name="title"]').value.trim();
+        const content = ta.value.trim();
+        if (!content) { toast('笔记内容必填', 'warn'); return; }
+        const category = local.querySelector('input[name="category"]').value.trim();
+        const tags = local.querySelector('input[name="tags"]').value.split(/[,，]/).map(s => s.trim()).filter(Boolean);
+        save.disabled = true;
+        try {
+          await api.createNoteAsset({ title, content, category, tags, article_slug: articleSel.value });
+          toast('已保存', 'success');
+          sub.close(true);
+          loadList();
+        } catch (err) {
+          toast(`保存失败: ${err.message}`, 'error');
+        } finally {
+          save.disabled = false;
+        }
+      };
+    }
+
+    function openEdit(asset) {
+      const local = document.createElement('div');
+      const titleRow = buildField({ name: 'title', label: '标题', value: asset.title || '' });
+      const catRow = buildField({ name: 'category', label: '分类', value: asset.category || '' });
+      const tagsRow = buildField({ name: 'tags', label: '标签（逗号分隔）', value: (asset.tags || []).join(', ') });
+      const articleRow = document.createElement('div');
+      articleRow.className = 'form-row';
+      const lbl = document.createElement('label');
+      lbl.textContent = '关联文章';
+      articleRow.appendChild(lbl);
+      const articleSel = document.createElement('select');
+      const noneOpt = document.createElement('option');
+      noneOpt.value = '';
+      noneOpt.textContent = '（不关联）';
+      articleSel.appendChild(noneOpt);
+      for (const a of state.articles) {
+        const opt = document.createElement('option');
+        opt.value = a.slug;
+        opt.textContent = a.title || a.slug;
+        if (a.slug === asset.article_slug) opt.selected = true;
+        articleSel.appendChild(opt);
+      }
+      articleRow.appendChild(articleSel);
+      local.append(titleRow, catRow, tagsRow, articleRow);
+
+      if (asset.type === 'link') {
+        const urlRow = buildField({ name: 'url', label: 'URL', value: asset.url || '' });
+        local.insertBefore(urlRow, titleRow);
+      } else if (asset.type === 'note') {
+        const lbl2 = document.createElement('label');
+        lbl2.textContent = '内容';
+        lbl2.style.fontSize = '12px';
+        lbl2.style.fontWeight = '600';
+        lbl2.style.color = 'var(--fg-soft)';
+        const ta = document.createElement('textarea');
+        ta.name = 'content';
+        ta.rows = 8;
+        ta.value = asset.content || '';
+        ta.style.cssText = 'width:100%;font-family:var(--mono);font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--fg);resize:vertical;';
+        const wrap = document.createElement('div');
+        wrap.className = 'form-row';
+        wrap.appendChild(lbl2);
+        wrap.appendChild(ta);
+        local.insertBefore(wrap, titleRow);
+        local.__contentTa = ta;
+      }
+
+      const subFoot = document.createElement('div');
+      subFoot.style.display = 'flex';
+      subFoot.style.gap = '8px';
+      subFoot.style.justifyContent = 'flex-end';
+      const cancel = document.createElement('button');
+      cancel.className = 'btn';
+      cancel.type = 'button';
+      cancel.textContent = '取消';
+      const save = document.createElement('button');
+      save.className = 'btn btn-primary';
+      save.type = 'button';
+      save.textContent = '保存';
+      subFoot.append(cancel, save);
+
+      const sub = modal({ title: '编辑素材', body: local, footer: subFoot, width: '520px' });
+      cancel.onclick = () => sub.close(null);
+      save.onclick = async () => {
+        const patch = {
+          title: local.querySelector('input[name="title"]').value.trim(),
+          category: local.querySelector('input[name="category"]').value.trim(),
+          tags: local.querySelector('input[name="tags"]').value.split(/[,，]/).map(s => s.trim()).filter(Boolean),
+          article_slug: articleSel.value
+        };
+        if (asset.type === 'link') {
+          patch.url = local.querySelector('input[name="url"]').value.trim();
+          if (!patch.url) { toast('URL 必填', 'warn'); return; }
+        } else if (asset.type === 'note') {
+          patch.content = local.__contentTa.value;
+          if (!patch.content.trim()) { toast('笔记内容必填', 'warn'); return; }
+        }
+        save.disabled = true;
+        try {
+          await api.updateAsset(asset.id, patch);
+          toast('已保存', 'success');
+          sub.close(true);
+          loadList();
+        } catch (err) {
+          toast(`保存失败: ${err.message}`, 'error');
+        } finally {
+          save.disabled = false;
+        }
+      };
+    }
+
+    function openFilePicker() {
+      const fileInput = document.createElement('input');
+      fileInput.type = 'file';
+      fileInput.multiple = false;
+      fileInput.style.display = 'none';
+      fileInput.addEventListener('change', async () => {
+        const file = fileInput.files && fileInput.files[0];
+        if (!file) return;
+        const title = prompt(`为「${file.name}」输入标题（可留空使用文件名）`, '');
+        try {
+          const data = await fileToBase64(file);
+          toast('上传中…', 'info', 2000);
+          const up = await api.uploadFile({ filename: file.name, contentType: file.type, data });
+          await api.createFileAsset({
+            title: (title && title.trim()) || file.name,
+            filePathname: up.pathname,
+            url: up.url,
+            contentType: up.contentType,
+            size: up.size,
+            category: '',
+            tags: [],
+            article_slug: state.activeSlug || ''
+          });
+          toast('已上传', 'success');
+          loadList();
+        } catch (err) {
+          toast(`上传失败: ${err.message}`, 'error');
+        }
+      });
+      fileInput.click();
+    }
+
+    for (const [type, btn] of Object.entries(tabButtons)) {
+      btn.addEventListener('click', () => setActiveType(type));
+    }
+    let searchTimer = null;
+    searchInput.addEventListener('input', () => {
+      if (searchTimer) clearTimeout(searchTimer);
+      searchTimer = setTimeout(loadList, 250);
+    });
+    catSelect.addEventListener('change', loadList);
+    scopeSelect.addEventListener('change', loadList);
+
+    setActiveType('link');
+  }
+
   function newArticle() {
     return promptDialog({
       title: '新建文章',
@@ -1248,6 +1886,7 @@
     $('#btn-save').addEventListener('click', () => flushSave().then(() => toast('已保存')));
     $('#btn-convert').addEventListener('click', exportHtml);
     $('#btn-publish').addEventListener('click', publishArticle);
+    $('#btn-assets').addEventListener('click', openAssetManager);
     $('#btn-stats').addEventListener('click', openStats);
     $('#btn-settings').addEventListener('click', openSettings);
 
@@ -1267,6 +1906,8 @@
           openGenerateImage(action);
         } else if (action === 'prompt') {
           openPromptSettings();
+        } else if (action === 'assets') {
+          openAssetManager();
         } else {
           insertMarkdown(action);
         }
