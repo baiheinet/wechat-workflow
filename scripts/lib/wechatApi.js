@@ -17,9 +17,10 @@ function getAccessToken() {
       resolve(cachedToken);
       return;
     }
-    const { app_id, app_secret } = config.wechat;
+    const app_id = process.env.WECHAT_APP_ID || config.wechat?.app_id;
+    const app_secret = process.env.WECHAT_APP_SECRET || config.wechat?.app_secret;
     if (!app_id || !app_secret) {
-      reject(new Error('wechat.app_id and wechat.app_secret must be set in config.json'));
+      reject(new Error('WeChat credentials not configured. Set WECHAT_APP_ID and WECHAT_APP_SECRET env vars or configure in settings.'));
       return;
     }
     const url = `https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=${app_id}&secret=${app_secret}`;

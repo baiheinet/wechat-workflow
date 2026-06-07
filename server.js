@@ -94,7 +94,7 @@ function maskConfig(cfg) {
 }
 
 function configSummary(cfg) {
-  const wechatOk = !!(cfg.wechat && cfg.wechat.app_id && cfg.wechat.app_secret);
+  const wechatOk = !!(cfg.wechat && cfg.wechat.app_id && cfg.wechat.app_secret) || !!(process.env.WECHAT_APP_ID && process.env.WECHAT_APP_SECRET);
   const imageGenConfigured = !!getApiKey();
   return {
     wechat_configured: wechatOk,
