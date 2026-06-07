@@ -84,6 +84,67 @@ function buildPrompt(template, type, title, description) {
   return `${description || title || 'Article illustration'}, ${style}, illustration style, high quality`;
 }
 
+const PROMPT_PRESETS = {
+  style: {
+    '摄影写实': 'photorealistic, photographic, high detail',
+    '插画手绘': 'hand-drawn illustration, watercolor, painterly',
+    '国风': 'Chinese traditional style, ink wash, gongbi',
+    '科技感': 'futuristic, high-tech, sci-fi aesthetic, neon',
+    '极简': 'minimalist, clean lines, ample negative space',
+    '动漫': 'anime style, cel-shaded, vibrant colors'
+  },
+  scene: {
+    '室内': 'indoor setting, interior space',
+    '户外': 'outdoor setting, exterior',
+    '城市': 'urban cityscape, modern city',
+    '自然': 'natural landscape, wilderness',
+    '抽象': 'abstract background, non-representational',
+    '特写': 'extreme close-up, detailed focus'
+  },
+  lighting: {
+    '自然光': 'natural daylight, soft sun',
+    '暖光': 'warm lighting, golden hour, amber tones',
+    '冷光': 'cool lighting, blue tones, moonlight',
+    '逆光': 'backlit, rim lighting, silhouette effect',
+    '柔和散射': 'soft diffused lighting, even illumination',
+    '戏剧光': 'dramatic lighting, high contrast, chiaroscuro'
+  },
+  composition: {
+    '居中': 'centered composition, subject in middle',
+    '三分法': 'rule of thirds composition',
+    '对角线': 'diagonal composition, dynamic angle',
+    '俯拍': 'overhead shot, bird\'s eye view, top-down',
+    '平视': 'eye-level shot, straight-on perspective',
+    '特写': 'close-up shot, tight framing'
+  },
+  quality: {
+    '高清': 'high definition, sharp details',
+    '超写实': 'ultra-realistic, hyperrealistic',
+    '专业摄影': 'professional photography, studio quality',
+    '商业级': 'commercial grade, advertising quality',
+    '艺术级': 'fine art, gallery quality, museum-grade'
+  }
+};
+
+function buildStructuredPrompt({ subject, scene, style, lighting, composition, quality }, type = 'inline') {
+  const parts = [];
+  if (subject && String(subject).trim()) parts.push(String(subject).trim());
+  const s = PROMPT_PRESETS.style[style];
+  const sc = PROMPT_PRESETS.scene[scene];
+  const l = PROMPT_PRESETS.lighting[lighting];
+  const c = PROMPT_PRESETS.composition[composition];
+  const q = PROMPT_PRESETS.quality[quality];
+  if (s) parts.push(s);
+  if (sc) parts.push(sc);
+  if (l) parts.push(l);
+  if (c) parts.push(c);
+  if (q) parts.push(q);
+  if (type === 'cover') {
+    parts.push('horizontal format, WeChat article cover image');
+  }
+  return parts.join(', ');
+}
+
 async function uploadToBlob(buffer, pathname) {
   if (!blobStorage.isBlobEnabled()) {
     throw new Error('Blob Storage not configured — set BLOB_STORE_ID env var');
@@ -112,8 +173,10 @@ async function generateAndStore({ prompt, subdir, filename, ext }) {
   return uploadToBlob(buffer, pathname);
 }
 
-function generateCover(title, description, template) {
-  const prompt = buildPrompt(template, 'cover', title, description);
+function generateCover(title, description, template, promptOptions) {
+  const prompt = promptOptions
+    ? buildStructuredPrompt(promptOptions, 'cover')
+    : buildPrompt(template, 'cover', title, description);
   const slug = title ? title.replace(/[^a-zA-Z0-9\u4e00-\u9fff]/g, '_').slice(0, 40) : 'cover';
   return generateAndStore({
     prompt,
@@ -123,8 +186,10 @@ function generateCover(title, description, template) {
   }).then(result => ({ ...result, type: 'cover' }));
 }
 
-function generateInline(description, template) {
-  const prompt = buildPrompt(template, 'inline', '', description);
+function generateInline(description, template, promptOptions) {
+  const prompt = promptOptions
+    ? buildStructuredPrompt(promptOptions, 'inline')
+    : buildPrompt(template, 'inline', '', description);
   return generateAndStore({
     prompt,
     subdir: 'images',
@@ -133,4 +198,12 @@ function generateInline(description, template) {
   }).then(result => ({ ...result, type: 'inline' }));
 }
 
-module.exports = { generate, generateCover, generateInline, buildPrompt, getApiKey };
+module.exports = {
+  generate,
+  generateCover,
+  generateInline,
+  buildPrompt,
+  buildStructuredPrompt,
+  PROMPT_PRESETS,
+  getApiKey
+};

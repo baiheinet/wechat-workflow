@@ -12,6 +12,7 @@ const { render } = require('./scripts/lib/markdownToHtml');
 const { handleImages } = require('./scripts/lib/imageHandler');
 const { listTemplates } = require('./scripts/lib/templateLoader');
 const { generateCover, generateInline, getApiKey } = require('./scripts/lib/imageGen');
+const { PROMPT_PRESETS } = require('./scripts/lib/imageGen');
 const wechatApi = require('./scripts/lib/wechatApi');
 const blobStorage = require('./scripts/lib/blobStorage');
 const DATA_SRC = ROOT;
@@ -575,7 +576,7 @@ app.get('/api/assets', async (req, res, next) => {
 
 app.post('/api/generate-image', async (req, res) => {
   try {
-    const { type, title, description, template } = req.body || {};
+    const { type, title, description, template, promptOptions } = req.body || {};
     if (!['cover', 'inline'].includes(type)) {
       return res.status(400).json({ error: 'type must be "cover" or "inline"' });
     }
@@ -587,20 +588,26 @@ app.post('/api/generate-image', async (req, res) => {
       });
     }
     const tpl = template || readConfig().default_template || 'minimal';
+    const opts = (promptOptions && typeof promptOptions === 'object') ? promptOptions : null;
     const result = type === 'cover'
-      ? await generateCover(title || 'untitled', description, tpl)
-      : await generateInline(description || 'illustration', tpl);
+      ? await generateCover(title || 'untitled', description, tpl, opts)
+      : await generateInline(description || 'illustration', tpl, opts);
     res.json({
       ok: true,
       type: result.type,
       template: tpl,
       path: result.path,
       url: result.url,
-      storage: result.storage
+      storage: result.storage,
+      promptOptions: opts || null
     });
   } catch (err) {
     res.status(500).json({ code: 'GENERATE_FAILED', error: err.message });
   }
+});
+
+app.get('/api/prompt-presets', (req, res) => {
+  res.json({ presets: PROMPT_PRESETS });
 });
 
 app.use(express.static(PUBLIC_DIR, { maxAge: '1h' }));

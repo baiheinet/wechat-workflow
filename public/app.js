@@ -19,8 +19,63 @@
     saveTimer: null,
     renderTimer: null,
     saveInFlight: false,
-    lastSavedAt: null
+    lastSavedAt: null,
+    promptPresets: {},
+    promptPresetCatalog: null
   };
+
+  const PROMPT_PRESETS_KEY = 'wechatwf.promptPresets.v1';
+
+  function loadPromptPresets() {
+    try {
+      const raw = localStorage.getItem(PROMPT_PRESETS_KEY);
+      if (raw) state.promptPresets = JSON.parse(raw) || {};
+    } catch (err) {
+      state.promptPresets = {};
+    }
+  }
+
+  function savePromptPresets() {
+    try { localStorage.setItem(PROMPT_PRESETS_KEY, JSON.stringify(state.promptPresets)); }
+    catch (err) { console.warn('persist promptPresets failed', err); }
+  }
+
+  function getPromptPresetFor(slug) {
+    if (!slug) return null;
+    return state.promptPresets[slug] || null;
+  }
+
+  function setPromptPresetFor(slug, opts) {
+    if (!slug) return;
+    if (opts && Object.values(opts).some(v => v && String(v).trim())) {
+      state.promptPresets[slug] = { ...opts };
+    } else {
+      delete state.promptPresets[slug];
+    }
+    savePromptPresets();
+    updatePromptPresetIndicator();
+  }
+
+  function updatePromptPresetIndicator() {
+    const btn = $('#btn-prompt-settings');
+    if (!btn) return;
+    const has = !!getPromptPresetFor(state.activeSlug);
+    btn.classList.toggle('has-preset', has);
+    btn.title = has ? '结构化提示词（当前文章已设置）' : '结构化提示词面板';
+  }
+
+  async function loadPromptPresetCatalog() {
+    if (state.promptPresetCatalog) return state.promptPresetCatalog;
+    try {
+      const res = await api._fetch('/api/prompt-presets');
+      state.promptPresetCatalog = (res && res.presets) || null;
+    } catch (err) {
+      state.promptPresetCatalog = {
+        style: {}, scene: {}, lighting: {}, composition: {}, quality: {}
+      };
+    }
+    return state.promptPresetCatalog;
+  }
 
   const api = {
     async _fetch(path, opts = {}) {
@@ -272,6 +327,7 @@
       updateWordCount();
       renderArticleList();
       scheduleRender();
+      updatePromptPresetIndicator();
     }).catch(err => {
       toast(`加载文章失败: ${err.message}`, 'error');
     });
@@ -378,6 +434,196 @@
     markDirty();
   }
 
+  async function openPromptSettings() {
+    if (!state.activeSlug) {
+      toast('请先选中或新建一篇文章', 'warn');
+      return;
+    }
+    const catalog = await loadPromptPresetCatalog();
+    const current = getPromptPresetFor(state.activeSlug) || {};
+    const body = document.createElement('div');
+
+    const textRow = (label, name, placeholder) => {
+      const row = document.createElement('div');
+      row.className = 'form-row';
+      const l = document.createElement('label');
+      l.textContent = label;
+      row.appendChild(l);
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.name = name;
+      if (placeholder) input.placeholder = placeholder;
+      input.value = current[name] || '';
+      input.dataset.kind = 'text';
+      row.appendChild(input);
+      body.appendChild(row);
+      return input;
+    };
+    const selectRow = (label, name, options) => {
+      const row = document.createElement('div');
+      row.className = 'form-row';
+      const l = document.createElement('label');
+      l.textContent = label;
+      row.appendChild(l);
+      const sel = document.createElement('select');
+      sel.name = name;
+      sel.dataset.kind = 'select';
+      const blank = document.createElement('option');
+      blank.value = '';
+      blank.textContent = '（不指定）';
+      sel.appendChild(blank);
+      for (const k of Object.keys(options || {})) {
+        const opt = document.createElement('option');
+        opt.value = k;
+        opt.textContent = k;
+        if (k === (current[name] || '')) opt.selected = true;
+        sel.appendChild(opt);
+      }
+      row.appendChild(sel);
+      body.appendChild(row);
+      return sel;
+    };
+
+    const subjectInput = textRow('主体（必填）', 'subject', '例如：一只在雨中漫步的黑猫');
+    selectRow('场景 / 环境', 'scene', catalog.scene);
+    selectRow('风格', 'style', catalog.style);
+    selectRow('光照', 'lighting', catalog.lighting);
+    selectRow('构图', 'composition', catalog.composition);
+    selectRow('质量要求', 'quality', catalog.quality);
+
+    const presetType = document.createElement('div');
+    presetType.className = 'form-row';
+    const l = document.createElement('label');
+    l.textContent = '生成类型';
+    presetType.appendChild(l);
+    const sel = document.createElement('select');
+    sel.name = '__type';
+    for (const t of [
+      { v: 'inline', label: '插图 (inline)' },
+      { v: 'cover', label: '封面 (cover)' }
+    ]) {
+      const opt = document.createElement('option');
+      opt.value = t.v;
+      opt.textContent = t.label;
+      if (t.v === (current.__type || 'inline')) opt.selected = true;
+      sel.appendChild(opt);
+    }
+    presetType.appendChild(sel);
+    body.appendChild(presetType);
+
+    const note = document.createElement('div');
+    note.className = 'field-hint';
+    note.textContent = '设置仅保存在本地浏览器，按文章维度记忆；点击「保存」立即应用，点击「生成」按当前选项生成图片。';
+    body.appendChild(note);
+
+    const previewSlot = document.createElement('div');
+    body.appendChild(previewSlot);
+
+    const foot = document.createElement('div');
+    foot.style.display = 'flex';
+    foot.style.gap = '8px';
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'btn';
+    cancelBtn.textContent = '取消';
+    const clearBtn = document.createElement('button');
+    clearBtn.className = 'btn';
+    clearBtn.textContent = '清除';
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'btn';
+    saveBtn.textContent = '保存';
+    const generateBtn = document.createElement('button');
+    generateBtn.className = 'btn btn-primary';
+    generateBtn.textContent = '生成';
+    foot.append(cancelBtn, clearBtn, saveBtn, generateBtn);
+
+    const insertBtn = document.createElement('button');
+    insertBtn.className = 'btn btn-accent';
+    insertBtn.textContent = '插入到编辑器';
+    insertBtn.style.display = 'none';
+    foot.append(insertBtn);
+
+    const p = modal({ title: '🎯 结构化提示词', body, footer: foot, width: '520px' });
+
+    function readForm() {
+      const opts = {};
+      for (const el of body.querySelectorAll('[data-kind]')) {
+        if (el.dataset.kind === 'text') opts.subject = el.value;
+        else opts[el.name] = el.value;
+      }
+      opts.__type = body.querySelector('select[name="__type"]').value;
+      return opts;
+    }
+
+    cancelBtn.onclick = () => p.close(null);
+    clearBtn.onclick = () => {
+      setPromptPresetFor(state.activeSlug, null);
+      body.querySelectorAll('[data-kind]').forEach(el => { el.value = ''; });
+      body.querySelector('select[name="__type"]').value = 'inline';
+      toast('已清除当前文章的结构化提示词');
+    };
+    saveBtn.onclick = () => {
+      const opts = readForm();
+      const cleaned = { ...opts };
+      delete cleaned.__type;
+      setPromptPresetFor(state.activeSlug, cleaned);
+      toast('已保存', 'success');
+    };
+    let lastResult = null;
+    generateBtn.onclick = async () => {
+      const opts = readForm();
+      const cleaned = { ...opts };
+      const type = cleaned.__type || 'inline';
+      delete cleaned.__type;
+      if (!cleaned.subject || !cleaned.subject.trim()) {
+        toast('请先填写「主体」字段', 'warn');
+        return;
+      }
+      const cleanedNoSubject = { ...cleaned };
+      delete cleanedNoSubject.subject;
+      const hasAny = Object.values(cleanedNoSubject).some(v => v && String(v).trim());
+      if (!hasAny) {
+        toast('至少选择一个分类（场景/风格/光照/构图/质量）', 'warn');
+        return;
+      }
+      setPromptPresetFor(state.activeSlug, cleaned);
+      previewSlot.innerHTML = '';
+      generateBtn.classList.add('chip-loading');
+      generateBtn.disabled = true;
+      try {
+        const fd = { type, promptOptions: cleaned };
+        if (type === 'cover') fd.title = $('#article-title').value.trim() || cleaned.subject;
+        else fd.description = cleaned.subject;
+        fd.template = $('#template-select').value || state.template;
+        lastResult = await api.generateImage(fd);
+        const img = document.createElement('img');
+        img.className = 'gen-preview';
+        img.src = lastResult.url;
+        img.alt = lastResult.path;
+        const meta = document.createElement('div');
+        meta.className = 'field-hint';
+        meta.textContent = `已保存: ${lastResult.path}（远程: 已上传）`;
+        previewSlot.append(img, meta);
+        insertBtn.style.display = '';
+      } catch (err) {
+        const body2 = err.body || {};
+        const errEl = document.createElement('div');
+        errEl.className = 'gen-error';
+        errEl.textContent = `${body2.error || err.message}${body2.hint ? '\n💡 ' + body2.hint : ''}`;
+        previewSlot.appendChild(errEl);
+      } finally {
+        generateBtn.classList.remove('chip-loading');
+        generateBtn.disabled = false;
+      }
+    };
+    insertBtn.onclick = () => {
+      if (!lastResult) return;
+      const type = body.querySelector('select[name="__type"]').value;
+      insertGeneratedImage(type, lastResult);
+      p.close(true);
+    };
+    p.then(() => {});
+  }
+
   async function openGenerateImage(type) {
     if (!state.activeArticle) {
       toast('请先选中或新建一篇文章', 'warn');
@@ -464,6 +710,8 @@
           description: body.querySelectorAll('input')[1]?.value || '',
           template: body.querySelector('select').value
         };
+        const preset = getPromptPresetFor(state.activeSlug);
+        if (preset) fd.promptOptions = preset;
         result = await api.generateImage(fd);
         const img = document.createElement('img');
         img.className = 'gen-preview';
@@ -779,11 +1027,16 @@
         const action = chip.dataset.md;
         if (action === 'cover' || action === 'inline') {
           openGenerateImage(action);
+        } else if (action === 'prompt') {
+          openPromptSettings();
         } else {
           insertMarkdown(action);
         }
       });
     });
+
+    loadPromptPresets();
+    updatePromptPresetIndicator();
 
     document.addEventListener('keydown', (e) => {
       const meta = e.ctrlKey || e.metaKey;
