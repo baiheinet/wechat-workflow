@@ -1100,13 +1100,82 @@
       if (articles.length > 0) {
         selectArticle(articles[0].slug);
       } else {
-        doRender();
+        seedSampleArticle().finally(() => doRender());
       }
     }).catch(err => {
       console.error('init failed', err);
       setStatus('down', '后端连接失败');
       toast(`后端连接失败: ${err.message}`, 'error', 5000);
     });
+  }
+
+  const SAMPLE_ARTICLE_BODY = `# 欢迎使用 WeChat Workflow
+
+这是一篇**示例文章**，演示了 Markdown 转微信公众号样式的核心排版能力。
+
+## 文本样式
+
+普通段落，用于测试基础排版。**加粗** 和 *斜体* 以及 ~~删除线~~。
+
+> 这是引用块，用于突出某段重要文字。
+
+## 列表
+
+- 无序项 1
+- 无序项 2
+- 无序项 3
+
+1. 有序第一步
+2. 有序第二步
+3. 有序第三步
+
+## 代码
+
+行内 \`const x = 1\`。
+
+\`\`\`javascript
+function hello() {
+  console.log("Hello, WeChat!");
+  return true;
+}
+\`\`\`
+
+## 表格
+
+| 功能 | 状态 |
+|------|------|
+| 封面/插图生成 | 已支持 |
+| 模板切换 | 已支持 |
+| 微信发布 | 已支持 |
+
+## 链接
+
+[示例链接](https://example.com)
+
+---
+
+试着编辑这篇内容，或者点右上角「+ 新建文章」开始写自己的稿子吧。`;
+
+  async function seedSampleArticle() {
+    try {
+      const result = await api.createArticle({
+        title: '欢迎使用 WeChat Workflow',
+        author: 'Multica',
+        content: SAMPLE_ARTICLE_BODY,
+        tags: ['welcome', 'sample'],
+        status: 'draft'
+      });
+      const articles = await api.listArticles();
+      state.articles = articles;
+      state.articlesBySlug = new Map(articles.map(a => [a.slug, a]));
+      renderArticleList();
+      if (result && result.slug) {
+        selectArticle(result.slug);
+        toast(`已创建示例文章: ${result.slug}`, 'success');
+      }
+    } catch (err) {
+      console.warn('seed sample article failed', err);
+    }
   }
 
   if (document.readyState === 'loading') {
