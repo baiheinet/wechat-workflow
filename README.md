@@ -7,7 +7,6 @@
 ```
 wechat-workflow/
 ├── articles/{drafts,ready,published}/   # 文章各阶段
-├── topics/                              # 选题（Markdown + frontmatter，blob 存储前缀 topics/）
 ├── assets/{covers,images}/              # 素材文件（AI 生成图自动落在这里）
 ├── templates/                           # 排版模板 (JSON)
 ├── scripts/                             # 核心转换逻辑（CLI 与 Web 共享）
@@ -66,12 +65,6 @@ npm start            # 启动 Web 服务，监听 :3000
 | POST | `/api/articles` | 新建文章 |
 | PUT  | `/api/articles/:slug` | 更新文章（保存） |
 | DELETE | `/api/articles/:slug` | 删除文章 |
-| GET  | `/api/topics/meta` | 选题枚举（status / priority） |
-| GET  | `/api/topics` | 选题列表（按 `updatedAt` 倒序） |
-| GET  | `/api/topics/:slug` | 读取单个选题（含正文） |
-| POST | `/api/topics` | 新建选题 |
-| PUT  | `/api/topics/:slug` | 更新选题 |
-| DELETE | `/api/topics/:slug` | 删除选题 |
 | POST | `/api/render` | 渲染 Markdown → HTML（预览用） |
 | POST | `/api/convert` | 导出 HTML 到 `articles/ready/` |
 | POST | `/api/publish` | 推送到微信草稿箱（未配凭据时模拟发布） |
@@ -104,27 +97,6 @@ npm start            # 启动 Web 服务，监听 :3000
 | minimal | 简约 | 通用文章 |
 | tech | 科技 | 技术文章 |
 | literary | 文艺 | 文学/随笔 |
-
-## 选题策划（看板）
-
-顶栏切换「写作 / 选题看板」两个视图。选题以 Markdown + frontmatter 形式存储在 blob 的 `topics/<slug>.md` 前缀下（无 blob 时无法使用，与文章共享同一存储配置）。
-
-frontmatter 字段：
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `title` | string | 选题标题（必填） |
-| `summary` | string | 摘要（2-3 句核心观点） |
-| `source` | string | 灵感来源（链接 / 内部备注） |
-| `status` | enum | `idea` / `researching` / `writing` / `done` / `published` / `shelved` |
-| `priority` | enum | `P0` / `P1` / `P2` / `P3` |
-| `linkedArticle` | string | 关联文章 slug |
-| `tags` | string[] | 标签 |
-| `createdAt` / `updatedAt` | ISO | 自动维护 |
-
-看板视图提供 6 列泳道（每个状态一列），原生 HTML5 drag & drop 拖拽卡片切换状态；列表视图按更新时间倒序展示。卡片上的「📄」一键基于选题内容预填新建文章，并将 `linkedArticle` 写回选题。
-
-> ⚠️ 选题与文章都依赖 blob 存储。Vercel 部署时运行在 `/tmp`，不会持久化。
 
 ## CLI（仍可用）
 

@@ -21,13 +21,7 @@
     saveInFlight: false,
     lastSavedAt: null,
     promptPresets: {},
-    promptPresetCatalog: null,
-    view: 'articles',
-    topics: [],
-    topicsBySlug: new Map(),
-    topicsMeta: { statuses: [], priorities: [] },
-    topicSearch: '',
-    boardView: 'kanban'
+    promptPresetCatalog: null
   };
 
   const PROMPT_PRESETS_KEY = 'wechatwf.promptPresets.v1';
@@ -116,13 +110,7 @@
     getStats(params) {
       const qs = params ? '?' + new URLSearchParams(params).toString() : '';
       return this._fetch('/api/stats' + qs);
-    },
-    getTopicsMeta() { return this._fetch('/api/topics/meta'); },
-    listTopics() { return this._fetch('/api/topics'); },
-    getTopic(slug) { return this._fetch(`/api/topics/${encodeURIComponent(slug)}`); },
-    createTopic(payload) { return this._fetch('/api/topics', { method: 'POST', body: JSON.stringify(payload) }); },
-    updateTopic(slug, payload) { return this._fetch(`/api/topics/${encodeURIComponent(slug)}`, { method: 'PUT', body: JSON.stringify(payload) }); },
-    deleteTopic(slug) { return this._fetch(`/api/topics/${encodeURIComponent(slug)}`, { method: 'DELETE' }); }
+    }
   };
 
   function toast(message, type = 'info', duration = 3500) {
@@ -1299,8 +1287,6 @@
       }
     });
 
-    bindTopicEvents();
-
     window.addEventListener('beforeunload', (e) => {
       if (state.dirty) {
         e.preventDefault();
@@ -1316,9 +1302,8 @@
       api.health().catch(err => { throw err; }),
       api.listTemplates().catch(() => []),
       api.getConfig().catch(() => null),
-      api.listArticles().catch(() => []),
-      api.getTopicsMeta().catch(() => null)
-    ]).then(([health, templates, configRes, articles, topicsMeta]) => {
+      api.listArticles().catch(() => [])
+    ]).then(([health, templates, configRes, articles]) => {
       const wechatOk = configRes?.summary?.wechat_configured || health?.wechatConfigured;
       const imgOk = configRes?.summary?.imageGen_configured || health?.imageGenConfigured;
       const parts = [];
@@ -1342,7 +1327,6 @@
       state.template = sel.value;
       state.articles = articles;
       state.articlesBySlug = new Map(articles.map(a => [a.slug, a]));
-      if (topicsMeta) state.topicsMeta = topicsMeta;
       renderArticleList();
       applyConfigToUI();
       if (articles.length > 0) {
@@ -1350,11 +1334,6 @@
       } else {
         seedSampleArticle().finally(() => doRender());
       }
-      refreshTopicList()
-        .then(() => {
-          if (state.topics.length === 0) seedSampleTopics();
-        })
-        .catch(err => console.warn('initial topic load failed', err));
     }).catch(err => {
       console.error('init failed', err);
       setStatus('down', '后端连接失败');
