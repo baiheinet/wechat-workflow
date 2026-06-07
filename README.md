@@ -69,12 +69,6 @@ npm start            # 启动 Web 服务，监听 :3000
 | POST | `/api/convert` | 导出 HTML 到 `articles/ready/` |
 | POST | `/api/publish` | 推送到微信草稿箱（未配凭据时模拟发布） |
 | POST | `/api/generate-image` | AI 生图（cover / inline） |
-| GET  | `/api/assets` | 列出素材（支持 `?type=link\|file\|note`、`?article_slug=`、`?category=`、`?q=` 搜索） |
-| GET  | `/api/assets/:id` | 读取单条素材 |
-| POST | `/api/assets` | 新建素材（type=link/note 直接 JSON；type=file 需先 `/api/assets/upload` 拿到 `filePathname`） |
-| POST | `/api/assets/upload` | 上传文件（JSON `data` base64）返回 `{pathname,url,size,contentType}` |
-| PUT  | `/api/assets/:id` | 更新素材元数据 |
-| DELETE | `/api/assets/:id` | 删除素材（file 类型会同时清理底层文件） |
 
 ### `PUT /api/config` 字段白名单
 
