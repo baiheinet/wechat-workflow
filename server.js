@@ -439,6 +439,29 @@ app.post('/api/publish', async (req, res) => {
   }
 });
 
+app.get('/api/assets', (req, res) => {
+  const list = [];
+  const dirs = DATA_DIR !== ROOT
+    ? [path.join(DATA_DIR, 'assets'), path.join(ROOT, 'assets')]
+    : [path.join(ROOT, 'assets')];
+  for (const base of dirs) {
+    if (!fs.existsSync(base)) continue;
+    for (const sub of fs.readdirSync(base)) {
+      const subDir = path.join(base, sub);
+      if (!fs.statSync(subDir).isDirectory()) continue;
+      for (const f of fs.readdirSync(subDir)) {
+        list.push({
+          name: f,
+          type: sub,
+          url: `/assets/${sub}/${f}`
+        });
+      }
+    }
+  }
+  list.sort((a, b) => a.name.localeCompare(b.name));
+  res.json(list);
+});
+
 app.post('/api/generate-image', async (req, res) => {
   try {
     const { type, title, description, template } = req.body || {};
