@@ -749,31 +749,7 @@ app.post('/api/publish', async (req, res) => {
   }
 });
 
-app.get('/api/assets', async (req, res, next) => {
-  try {
-    requireBlob();
-    const result = await blobStorage.list();
-    const assets = result.blobs.map(b => {
-      const segments = b.pathname.split('/');
-      const type = segments.length > 1 ? segments[0] : 'misc';
-      const name = segments[segments.length - 1];
-      return {
-        name,
-        type,
-        url: b.url,
-        pathname: b.pathname,
-        size: b.size,
-        uploadedAt: b.uploadedAt,
-        contentType: b.contentType || 'image/png',
-        storage: 'blob'
-      };
-    });
-    assets.sort((a, b) => (b.uploadedAt || '').localeCompare(a.uploadedAt || ''));
-    res.json(assets);
-  } catch (err) {
-    next(err);
-  }
-});
+app.use('/api/assets', require('./routes/assets'));
 
 app.post('/api/generate-image', async (req, res) => {
   try {
