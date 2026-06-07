@@ -13,6 +13,7 @@ const { handleImages } = require('./scripts/lib/imageHandler');
 const { listTemplates } = require('./scripts/lib/templateLoader');
 const { generateCover, generateInline, getApiKey } = require('./scripts/lib/imageGen');
 const wechatApi = require('./scripts/lib/wechatApi');
+const blobStorage = require('./scripts/lib/blobStorage');
 const DATA_SRC = ROOT;
 const CONFIG_PATH = path.join(DATA_DIR, 'config.json');
 const CONFIG_SRC = path.join(DATA_SRC, 'config.json');
@@ -272,7 +273,8 @@ app.get('/api/health', (req, res) => {
     ok: true,
     version: '1.0.0',
     uptime: process.uptime(),
-    ...configSummary(readConfig())
+    ...configSummary(readConfig()),
+    blob_storage: blobStorage.isBlobEnabled() ? 'enabled' : 'disabled'
   });
 });
 
@@ -439,27 +441,52 @@ app.post('/api/publish', async (req, res) => {
   }
 });
 
-app.get('/api/assets', (req, res) => {
-  const list = [];
-  const dirs = DATA_DIR !== ROOT
-    ? [path.join(DATA_DIR, 'assets'), path.join(ROOT, 'assets')]
-    : [path.join(ROOT, 'assets')];
-  for (const base of dirs) {
-    if (!fs.existsSync(base)) continue;
-    for (const sub of fs.readdirSync(base)) {
-      const subDir = path.join(base, sub);
-      if (!fs.statSync(subDir).isDirectory()) continue;
-      for (const f of fs.readdirSync(subDir)) {
-        list.push({
-          name: f,
-          type: sub,
-          url: `/assets/${sub}/${f}`
-        });
+app.get('/api/assets', async (req, res) => {
+  if (!blobStorage.isBlobEnabled()) {
+    const list = [];
+    const dirs = DATA_DIR !== ROOT
+      ? [path.join(DATA_DIR, 'assets'), path.join(ROOT, 'assets')]
+      : [path.join(ROOT, 'assets')];
+    for (const base of dirs) {
+      if (!fs.existsSync(base)) continue;
+      for (const sub of fs.readdirSync(base)) {
+        const subDir = path.join(base, sub);
+        if (!fs.statSync(subDir).isDirectory()) continue;
+        for (const f of fs.readdirSync(subDir)) {
+          list.push({
+            name: f,
+            type: sub,
+            url: `/assets/${sub}/${f}`,
+            storage: 'local'
+          });
+        }
       }
     }
+    list.sort((a, b) => a.name.localeCompare(b.name));
+    return res.json(list);
   }
-  list.sort((a, b) => a.name.localeCompare(b.name));
-  res.json(list);
+  try {
+    const result = await blobStorage.list();
+    const assets = result.blobs.map(b => {
+      const segments = b.pathname.split('/');
+      const type = segments.length > 1 ? segments[0] : 'misc';
+      const name = segments[segments.length - 1];
+      return {
+        name,
+        type,
+        url: b.url,
+        pathname: b.pathname,
+        size: b.size,
+        uploadedAt: b.uploadedAt,
+        contentType: b.contentType || 'image/png',
+        storage: 'blob'
+      };
+    });
+    assets.sort((a, b) => (b.uploadedAt || '').localeCompare(a.uploadedAt || ''));
+    res.json(assets);
+  } catch (err) {
+    res.status(500).json({ error: err.message, code: 'BLOB_LIST_FAILED' });
+  }
 });
 
 app.post('/api/generate-image', async (req, res) => {
@@ -481,24 +508,17 @@ app.post('/api/generate-image', async (req, res) => {
       : await generateInline(description || 'illustration', tpl);
     res.json({
       ok: true,
-      ...result,
-      type,
+      type: result.type,
       template: tpl,
-      url: `/assets/${result.path.replace(/^assets\//, '')}`
+      path: result.path,
+      url: result.url,
+      storage: result.storage
     });
   } catch (err) {
     res.status(500).json({ code: 'GENERATE_FAILED', error: err.message });
   }
 });
 
-const ASSETS_DIRS = DATA_DIR !== ROOT
-  ? [path.join(DATA_DIR, 'assets'), path.join(ROOT, 'assets')]
-  : [path.join(ROOT, 'assets')];
-for (const d of ASSETS_DIRS) {
-  if (fs.existsSync(d)) {
-    app.use('/assets', express.static(d, { maxAge: '1h' }));
-  }
-}
 app.use(express.static(PUBLIC_DIR, { maxAge: '1h' }));
 
 app.get(/^\/(?!api).*/, (req, res, next) => {
