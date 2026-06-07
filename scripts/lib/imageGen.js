@@ -1,7 +1,4 @@
 const https = require('https');
-const fs = require('fs');
-const fsp = require('fs/promises');
-const os = require('os');
 const path = require('path');
 const config = require('../../config.json');
 const blobStorage = require('./blobStorage');
@@ -74,30 +71,6 @@ function downloadToBuffer(url) {
   });
 }
 
-function downloadToTempFile(url, ext) {
-  return new Promise((resolve, reject) => {
-    const tmpPath = path.join(os.tmpdir(), `imagegen_${Date.now()}_${Math.random().toString(36).slice(2, 8)}${ext}`);
-    const file = fs.createWriteStream(tmpPath);
-    const cleanup = () => { try { fs.unlinkSync(tmpPath); } catch {} };
-    https.get(url, (res) => {
-      if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        file.close();
-        cleanup();
-        downloadToTempFile(res.headers.location, ext).then(resolve, reject);
-        return;
-      }
-      if (res.statusCode !== 200) {
-        file.close();
-        cleanup();
-        reject(new Error(`Download failed with status ${res.statusCode}`));
-        return;
-      }
-      res.pipe(file);
-      file.on('finish', () => { file.close(); resolve(tmpPath); });
-    }).on('error', (err) => { cleanup(); reject(err); });
-  });
-}
-
 function buildPrompt(template, type, title, description) {
   const styleHints = {
     minimal: 'clean, minimalistic, ample whitespace, neutral colors',
@@ -111,21 +84,10 @@ function buildPrompt(template, type, title, description) {
   return `${description || title || 'Article illustration'}, ${style}, illustration style, high quality`;
 }
 
-const DATA_BASE = process.env.DATA_DIR || path.resolve(__dirname, '../..');
-
-function localFallbackSave(buffer, ext, subdir, filename) {
-  const outDir = path.join(DATA_BASE, 'assets', subdir);
-  fs.mkdirSync(outDir, { recursive: true });
-  const outputPath = path.join(outDir, filename);
-  fs.writeFileSync(outputPath, buffer);
-  return {
-    path: `assets/${subdir}/${filename}`,
-    url: `/assets/${subdir}/${filename}`,
-    storage: 'local'
-  };
-}
-
 async function uploadToBlob(buffer, pathname) {
+  if (!blobStorage.isBlobEnabled()) {
+    throw new Error('Blob Storage not configured — set BLOB_STORE_ID env var');
+  }
   const result = await blobStorage.put(pathname, buffer, {
     access: 'public',
     contentType: 'image/png',
@@ -139,20 +101,15 @@ async function uploadToBlob(buffer, pathname) {
 }
 
 async function generateAndStore({ prompt, subdir, filename, ext }) {
+  if (!blobStorage.isBlobEnabled()) {
+    throw new Error('Blob Storage not configured — set BLOB_STORE_ID env var');
+  }
   const apiResult = await generate(prompt, { size: '1024x768' });
   const realExt = ext || (path.extname(new URL(apiResult.url).pathname) || '.png');
   const finalFilename = filename.replace(/\.[^.]+$/, '') + realExt;
   const pathname = `${subdir}/${finalFilename}`;
   const buffer = await downloadToBuffer(apiResult.url);
-
-  if (blobStorage.isBlobEnabled()) {
-    try {
-      return await uploadToBlob(buffer, pathname);
-    } catch (err) {
-      console.error(`[imageGen] Blob upload failed, falling back to local: ${err.message}`);
-    }
-  }
-  return localFallbackSave(buffer, realExt, subdir, finalFilename);
+  return uploadToBlob(buffer, pathname);
 }
 
 function generateCover(title, description, template) {

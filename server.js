@@ -167,6 +167,16 @@ function slugify(s) {
 const ARTICLE_PREFIX = 'articles/drafts/';
 const articleBlobMeta = new Map();
 
+const BLOB_NOT_CONFIGURED_ERROR = 'Blob Storage not configured — set BLOB_STORE_ID env var';
+
+function requireBlob() {
+  if (!blobStorage.isBlobEnabled()) {
+    const err = new Error(BLOB_NOT_CONFIGURED_ERROR);
+    err.code = 'BLOB_NOT_CONFIGURED';
+    throw err;
+  }
+}
+
 function safeSlug(slug) {
   return String(slug || '').replace(/[^a-zA-Z0-9\u4e00-\u9fff_-]/g, '');
 }
@@ -211,22 +221,8 @@ async function fetchBlobText(url) {
   return res.text();
 }
 
-function listArticlesLocal() {
-  const files = fs.readdirSync(DRAFTS_DIR).filter(f => f.endsWith('.md'));
-  return files.map(filename => {
-    const full = path.join(DRAFTS_DIR, filename);
-    const raw = fs.readFileSync(full, 'utf-8');
-    const parsed = matter(raw);
-    const stat = fs.statSync(full);
-    return articleFromFrontmatter(
-      filename.replace(/\.md$/, ''),
-      parsed.data,
-      stat.mtime.toISOString()
-    );
-  }).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-}
-
-async function listArticlesBlob() {
+async function listArticles() {
+  requireBlob();
   await refreshArticleBlobMeta();
   const items = [];
   for (const [slug, meta] of articleBlobMeta) {
@@ -242,35 +238,8 @@ async function listArticlesBlob() {
   return items;
 }
 
-async function listArticles() {
-  if (blobStorage.isBlobEnabled()) {
-    try { return await listArticlesBlob(); }
-    catch (err) { console.error('[articles] Blob list failed, falling back to local:', err.message); }
-  }
-  return listArticlesLocal();
-}
-
-function readArticleLocal(slug) {
-  const safe = safeSlug(slug);
-  if (!safe) return null;
-  const full = path.join(DRAFTS_DIR, `${safe}.md`);
-  if (!fs.existsSync(full)) return null;
-  const raw = fs.readFileSync(full, 'utf-8');
-  const parsed = matter(raw);
-  return {
-    slug: safe,
-    title: parsed.data.title || safe,
-    author: parsed.data.author || '',
-    date: normalizeDate(parsed.data.date),
-    tags: parsed.data.tags || [],
-    status: parsed.data.status || 'draft',
-    cover: parsed.data.cover || '',
-    content: parsed.content,
-    frontmatter: parsed.data
-  };
-}
-
-async function readArticleBlob(slug) {
+async function readArticle(slug) {
+  requireBlob();
   const safe = safeSlug(slug);
   if (!safe) return null;
   if (!articleBlobMeta.has(safe)) {
@@ -293,34 +262,8 @@ async function readArticleBlob(slug) {
   };
 }
 
-async function readArticle(slug) {
-  if (blobStorage.isBlobEnabled()) {
-    try { return await readArticleBlob(slug); }
-    catch (err) { console.error(`[articles] Blob read failed for ${slug}, falling back:`, err.message); }
-  }
-  return readArticleLocal(slug);
-}
-
-function writeArticleLocal(slug, payload) {
-  const safe = safeSlug(slug);
-  if (!safe) throw new Error('Invalid slug');
-  const fm = {
-    title: payload.title || safe,
-    slug: safe,
-    author: payload.author || '',
-    date: payload.date || new Date().toISOString().slice(0, 10),
-    tags: payload.tags || [],
-    status: payload.status || 'draft'
-  };
-  if (payload.cover !== undefined) fm.cover = payload.cover;
-  const content = payload.content || '';
-  const body = matter.stringify(content, fm);
-  const full = path.join(DRAFTS_DIR, `${safe}.md`);
-  fs.writeFileSync(full, body, 'utf-8');
-  return { slug: safe, path: full };
-}
-
-async function writeArticleBlob(slug, payload) {
+async function writeArticle(slug, payload) {
+  requireBlob();
   const safe = safeSlug(slug);
   if (!safe) throw new Error('Invalid slug');
   const fm = {
@@ -345,22 +288,8 @@ async function writeArticleBlob(slug, payload) {
   return { slug: safe, pathname: result.pathname, url: result.url };
 }
 
-async function writeArticle(slug, payload) {
-  if (blobStorage.isBlobEnabled()) {
-    try { return await writeArticleBlob(slug, payload); }
-    catch (err) { console.error(`[articles] Blob write failed for ${slug}, falling back:`, err.message); }
-  }
-  return writeArticleLocal(slug, payload);
-}
-
-function deleteArticleLocal(slug) {
-  const safe = safeSlug(slug);
-  const full = path.join(DRAFTS_DIR, `${safe}.md`);
-  if (fs.existsSync(full)) fs.unlinkSync(full);
-  return { slug: safe, deleted: true };
-}
-
-async function deleteArticleBlob(slug) {
+async function deleteArticle(slug) {
+  requireBlob();
   const safe = safeSlug(slug);
   if (!articleBlobMeta.has(safe)) {
     await refreshArticleBlobMeta();
@@ -373,28 +302,14 @@ async function deleteArticleBlob(slug) {
   return { slug: safe, deleted: true };
 }
 
-async function deleteArticle(slug) {
-  if (blobStorage.isBlobEnabled()) {
-    try { return await deleteArticleBlob(slug); }
-    catch (err) { console.error(`[articles] Blob delete failed for ${slug}, falling back:`, err.message); }
-  }
-  return deleteArticleLocal(slug);
-}
-
 async function articleExists(slug) {
+  requireBlob();
   const safe = safeSlug(slug);
   if (!safe) return false;
-  if (blobStorage.isBlobEnabled()) {
-    try {
-      if (!articleBlobMeta.has(safe)) {
-        await refreshArticleBlobMeta();
-      }
-      return articleBlobMeta.has(safe);
-    } catch (err) {
-      console.error(`[articles] Blob exists check failed for ${slug}, falling back:`, err.message);
-    }
+  if (!articleBlobMeta.has(safe)) {
+    await refreshArticleBlobMeta();
   }
-  return fs.existsSync(path.join(DRAFTS_DIR, `${safe}.md`));
+  return articleBlobMeta.has(safe);
 }
 
 function renderMarkdown(content, template) {
@@ -605,31 +520,9 @@ app.post('/api/publish', async (req, res) => {
   }
 });
 
-app.get('/api/assets', async (req, res) => {
-  if (!blobStorage.isBlobEnabled()) {
-    const list = [];
-    const dirs = DATA_DIR !== ROOT
-      ? [path.join(DATA_DIR, 'assets'), path.join(ROOT, 'assets')]
-      : [path.join(ROOT, 'assets')];
-    for (const base of dirs) {
-      if (!fs.existsSync(base)) continue;
-      for (const sub of fs.readdirSync(base)) {
-        const subDir = path.join(base, sub);
-        if (!fs.statSync(subDir).isDirectory()) continue;
-        for (const f of fs.readdirSync(subDir)) {
-          list.push({
-            name: f,
-            type: sub,
-            url: `/assets/${sub}/${f}`,
-            storage: 'local'
-          });
-        }
-      }
-    }
-    list.sort((a, b) => a.name.localeCompare(b.name));
-    return res.json(list);
-  }
+app.get('/api/assets', async (req, res, next) => {
   try {
+    requireBlob();
     const result = await blobStorage.list();
     const assets = result.blobs.map(b => {
       const segments = b.pathname.split('/');
@@ -649,7 +542,7 @@ app.get('/api/assets', async (req, res) => {
     assets.sort((a, b) => (b.uploadedAt || '').localeCompare(a.uploadedAt || ''));
     res.json(assets);
   } catch (err) {
-    res.status(500).json({ error: err.message, code: 'BLOB_LIST_FAILED' });
+    next(err);
   }
 });
 
@@ -696,7 +589,8 @@ app.get(/^\/(?!api).*/, (req, res, next) => {
 
 app.use((err, req, res, next) => {
   console.error('[server]', err);
-  res.status(500).json({ error: err.message || 'Internal error' });
+  const status = err.code === 'BLOB_NOT_CONFIGURED' ? 503 : 500;
+  res.status(status).json({ error: err.message || 'Internal error' });
 });
 
 const PORT = process.env.PORT || 3000;

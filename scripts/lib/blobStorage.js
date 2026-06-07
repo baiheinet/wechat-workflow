@@ -22,13 +22,17 @@ async function put(pathname, data, options = {}) {
 
 async function list(options = {}) {
   const blob = await getBlob();
-  if (!blob) return { blobs: [], cursor: undefined };
+  if (!blob) {
+    throw new Error('Blob storage not configured — set BLOB_READ_WRITE_TOKEN or BLOB_STORE_ID env var');
+  }
   return blob.list(options);
 }
 
 async function del(pathOrUrl) {
   const blob = await getBlob();
-  if (!blob) return null;
+  if (!blob) {
+    throw new Error('Blob storage not configured — set BLOB_READ_WRITE_TOKEN or BLOB_STORE_ID env var');
+  }
   return blob.del(pathOrUrl);
 }
 
