@@ -164,28 +164,94 @@ function slugify(s) {
     .slice(0, 80) || 'untitled';
 }
 
-function listArticles() {
+const ARTICLE_PREFIX = 'articles/drafts/';
+const articleBlobMeta = new Map();
+
+function safeSlug(slug) {
+  return String(slug || '').replace(/[^a-zA-Z0-9\u4e00-\u9fff_-]/g, '');
+}
+
+function articlePathname(slug) {
+  return `${ARTICLE_PREFIX}${slug}.md`;
+}
+
+function normalizeDate(d) {
+  if (!d) return '';
+  if (d instanceof Date) return d.toISOString();
+  return String(d);
+}
+
+function articleFromFrontmatter(slug, fm, fallbackUpdatedAt) {
+  return {
+    slug,
+    filename: `${slug}.md`,
+    title: fm.title || slug,
+    author: fm.author || '',
+    date: normalizeDate(fm.date),
+    tags: fm.tags || [],
+    status: fm.status || 'draft',
+    updatedAt: fallbackUpdatedAt || new Date().toISOString()
+  };
+}
+
+async function refreshArticleBlobMeta() {
+  articleBlobMeta.clear();
+  const result = await blobStorage.list({ prefix: ARTICLE_PREFIX });
+  for (const b of result.blobs) {
+    const m = b.pathname.match(/^articles\/drafts\/(.+)\.md$/);
+    if (!m) continue;
+    articleBlobMeta.set(m[1], { url: b.url, pathname: b.pathname, uploadedAt: b.uploadedAt });
+  }
+  return articleBlobMeta;
+}
+
+async function fetchBlobText(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Fetch ${url} → ${res.status}`);
+  return res.text();
+}
+
+function listArticlesLocal() {
   const files = fs.readdirSync(DRAFTS_DIR).filter(f => f.endsWith('.md'));
   return files.map(filename => {
     const full = path.join(DRAFTS_DIR, filename);
     const raw = fs.readFileSync(full, 'utf-8');
     const parsed = matter(raw);
     const stat = fs.statSync(full);
-    return {
-      slug: filename.replace(/\.md$/, ''),
-      filename,
-      title: parsed.data.title || filename.replace(/\.md$/, ''),
-      author: parsed.data.author || '',
-      date: parsed.data.date || '',
-      tags: parsed.data.tags || [],
-      status: parsed.data.status || 'draft',
-      updatedAt: stat.mtime.toISOString()
-    };
+    return articleFromFrontmatter(
+      filename.replace(/\.md$/, ''),
+      parsed.data,
+      stat.mtime.toISOString()
+    );
   }).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
-function readArticle(slug) {
-  const safe = slug.replace(/[^a-zA-Z0-9\u4e00-\u9fff_-]/g, '');
+async function listArticlesBlob() {
+  await refreshArticleBlobMeta();
+  const items = [];
+  for (const [slug, meta] of articleBlobMeta) {
+    try {
+      const text = await fetchBlobText(meta.url);
+      const parsed = matter(text);
+      items.push(articleFromFrontmatter(slug, parsed.data, meta.uploadedAt));
+    } catch (err) {
+      items.push(articleFromFrontmatter(slug, {}, meta.uploadedAt));
+    }
+  }
+  items.sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
+  return items;
+}
+
+async function listArticles() {
+  if (blobStorage.isBlobEnabled()) {
+    try { return await listArticlesBlob(); }
+    catch (err) { console.error('[articles] Blob list failed, falling back to local:', err.message); }
+  }
+  return listArticlesLocal();
+}
+
+function readArticleLocal(slug) {
+  const safe = safeSlug(slug);
   if (!safe) return null;
   const full = path.join(DRAFTS_DIR, `${safe}.md`);
   if (!fs.existsSync(full)) return null;
@@ -195,7 +261,7 @@ function readArticle(slug) {
     slug: safe,
     title: parsed.data.title || safe,
     author: parsed.data.author || '',
-    date: parsed.data.date || '',
+    date: normalizeDate(parsed.data.date),
     tags: parsed.data.tags || [],
     status: parsed.data.status || 'draft',
     cover: parsed.data.cover || '',
@@ -204,8 +270,39 @@ function readArticle(slug) {
   };
 }
 
-function writeArticle(slug, payload) {
-  const safe = slug.replace(/[^a-zA-Z0-9\u4e00-\u9fff_-]/g, '');
+async function readArticleBlob(slug) {
+  const safe = safeSlug(slug);
+  if (!safe) return null;
+  if (!articleBlobMeta.has(safe)) {
+    await refreshArticleBlobMeta();
+  }
+  const meta = articleBlobMeta.get(safe);
+  if (!meta) return null;
+  const text = await fetchBlobText(meta.url);
+  const parsed = matter(text);
+  return {
+    slug: safe,
+    title: parsed.data.title || safe,
+    author: parsed.data.author || '',
+    date: normalizeDate(parsed.data.date),
+    tags: parsed.data.tags || [],
+    status: parsed.data.status || 'draft',
+    cover: parsed.data.cover || '',
+    content: parsed.content,
+    frontmatter: parsed.data
+  };
+}
+
+async function readArticle(slug) {
+  if (blobStorage.isBlobEnabled()) {
+    try { return await readArticleBlob(slug); }
+    catch (err) { console.error(`[articles] Blob read failed for ${slug}, falling back:`, err.message); }
+  }
+  return readArticleLocal(slug);
+}
+
+function writeArticleLocal(slug, payload) {
+  const safe = safeSlug(slug);
   if (!safe) throw new Error('Invalid slug');
   const fm = {
     title: payload.title || safe,
@@ -223,11 +320,81 @@ function writeArticle(slug, payload) {
   return { slug: safe, path: full };
 }
 
-function deleteArticle(slug) {
-  const safe = slug.replace(/[^a-zA-Z0-9\u4e00-\u9fff_-]/g, '');
+async function writeArticleBlob(slug, payload) {
+  const safe = safeSlug(slug);
+  if (!safe) throw new Error('Invalid slug');
+  const fm = {
+    title: payload.title || safe,
+    slug: safe,
+    author: payload.author || '',
+    date: payload.date || new Date().toISOString().slice(0, 10),
+    tags: payload.tags || [],
+    status: payload.status || 'draft'
+  };
+  if (payload.cover !== undefined) fm.cover = payload.cover;
+  const content = payload.content || '';
+  const body = matter.stringify(content, fm);
+  const pathname = articlePathname(safe);
+  const buffer = Buffer.from(body, 'utf-8');
+  const result = await blobStorage.put(pathname, buffer, {
+    access: 'public',
+    contentType: 'text/markdown',
+    allowOverwrite: true
+  });
+  articleBlobMeta.set(safe, { url: result.url, pathname: result.pathname, uploadedAt: result.uploadedAt || new Date().toISOString() });
+  return { slug: safe, pathname: result.pathname, url: result.url };
+}
+
+async function writeArticle(slug, payload) {
+  if (blobStorage.isBlobEnabled()) {
+    try { return await writeArticleBlob(slug, payload); }
+    catch (err) { console.error(`[articles] Blob write failed for ${slug}, falling back:`, err.message); }
+  }
+  return writeArticleLocal(slug, payload);
+}
+
+function deleteArticleLocal(slug) {
+  const safe = safeSlug(slug);
   const full = path.join(DRAFTS_DIR, `${safe}.md`);
   if (fs.existsSync(full)) fs.unlinkSync(full);
   return { slug: safe, deleted: true };
+}
+
+async function deleteArticleBlob(slug) {
+  const safe = safeSlug(slug);
+  if (!articleBlobMeta.has(safe)) {
+    await refreshArticleBlobMeta();
+  }
+  const meta = articleBlobMeta.get(safe);
+  if (meta) {
+    await blobStorage.del(meta.url);
+    articleBlobMeta.delete(safe);
+  }
+  return { slug: safe, deleted: true };
+}
+
+async function deleteArticle(slug) {
+  if (blobStorage.isBlobEnabled()) {
+    try { return await deleteArticleBlob(slug); }
+    catch (err) { console.error(`[articles] Blob delete failed for ${slug}, falling back:`, err.message); }
+  }
+  return deleteArticleLocal(slug);
+}
+
+async function articleExists(slug) {
+  const safe = safeSlug(slug);
+  if (!safe) return false;
+  if (blobStorage.isBlobEnabled()) {
+    try {
+      if (!articleBlobMeta.has(safe)) {
+        await refreshArticleBlobMeta();
+      }
+      return articleBlobMeta.has(safe);
+    } catch (err) {
+      console.error(`[articles] Blob exists check failed for ${slug}, falling back:`, err.message);
+    }
+  }
+  return fs.existsSync(path.join(DRAFTS_DIR, `${safe}.md`));
 }
 
 function renderMarkdown(content, template) {
@@ -304,24 +471,27 @@ app.get('/api/templates', (req, res) => {
   res.json(listTemplates());
 });
 
-app.get('/api/articles', (req, res) => {
-  res.json(listArticles());
+app.get('/api/articles', async (req, res, next) => {
+  try { res.json(await listArticles()); }
+  catch (err) { next(err); }
 });
 
-app.get('/api/articles/:slug', (req, res) => {
-  const article = readArticle(req.params.slug);
-  if (!article) return res.status(404).json({ error: 'Not found' });
-  res.json(article);
+app.get('/api/articles/:slug', async (req, res, next) => {
+  try {
+    const article = await readArticle(req.params.slug);
+    if (!article) return res.status(404).json({ error: 'Not found' });
+    res.json(article);
+  } catch (err) { next(err); }
 });
 
-app.post('/api/articles', (req, res) => {
+app.post('/api/articles', async (req, res, next) => {
   try {
     const { title, author, content, tags, status } = req.body || {};
     const slug = slugify(req.body?.slug || title);
-    if (fs.existsSync(path.join(DRAFTS_DIR, `${slug}.md`))) {
+    if (await articleExists(slug)) {
       return res.status(409).json({ error: `Article "${slug}" already exists` });
     }
-    const result = writeArticle(slug, {
+    const result = await writeArticle(slug, {
       title: title || slug,
       author: author || '',
       content: content || '',
@@ -335,32 +505,30 @@ app.post('/api/articles', (req, res) => {
   }
 });
 
-app.put('/api/articles/:slug', (req, res) => {
+app.put('/api/articles/:slug', async (req, res, next) => {
   try {
-    const existing = readArticle(req.params.slug);
+    const existing = await readArticle(req.params.slug);
     if (!existing) return res.status(404).json({ error: 'Not found' });
     const payload = {
       ...existing,
       ...(req.body || {}),
       slug: existing.slug
     };
-    writeArticle(existing.slug, payload);
+    await writeArticle(existing.slug, payload);
     res.json({ ok: true, slug: existing.slug });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    next(err);
   }
 });
 
-app.delete('/api/articles/:slug', (req, res) => {
+app.delete('/api/articles/:slug', async (req, res, next) => {
   try {
-    const result = deleteArticle(req.params.slug);
+    const result = await deleteArticle(req.params.slug);
     res.json({ ok: true, ...result });
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
+  } catch (err) { next(err); }
 });
 
-app.post('/api/render', (req, res) => {
+app.post('/api/render', async (req, res, next) => {
   try {
     const { content, template, slug } = req.body || {};
     if (typeof content !== 'string') {
@@ -368,7 +536,7 @@ app.post('/api/render', (req, res) => {
     }
     let article = { title: '', author: '', date: '' };
     if (slug) {
-      const a = readArticle(slug);
+      const a = await readArticle(slug);
       if (a) article = a;
     } else if (req.body && req.body.frontmatter) {
       article = { ...article, ...req.body.frontmatter };
@@ -376,16 +544,14 @@ app.post('/api/render', (req, res) => {
     const contentHtml = renderMarkdown(content, template);
     const fullHtml = buildArticleHtml(article, contentHtml);
     res.json({ ok: true, html: fullHtml, contentHtml });
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
+  } catch (err) { next(err); }
 });
 
-app.post('/api/convert', (req, res) => {
+app.post('/api/convert', async (req, res, next) => {
   try {
     const { slug, template } = req.body || {};
     if (!slug) return res.status(400).json({ error: 'slug required' });
-    const article = readArticle(slug);
+    const article = await readArticle(slug);
     if (!article) return res.status(404).json({ error: 'Article not found' });
     const cfg = readConfig();
     const tpl = template || cfg.default_template || 'minimal';
@@ -395,16 +561,14 @@ app.post('/api/convert', (req, res) => {
     const outPath = path.join(READY_DIR, `${article.slug}.${tpl}.html`);
     fs.writeFileSync(outPath, fullHtml, 'utf-8');
     res.json({ ok: true, path: outPath, slug: article.slug, template: tpl });
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
+  } catch (err) { next(err); }
 });
 
 app.post('/api/publish', async (req, res) => {
   try {
     const { slug, template } = req.body || {};
     if (!slug) return res.status(400).json({ error: 'slug required' });
-    const article = readArticle(slug);
+    const article = await readArticle(slug);
     if (!article) return res.status(404).json({ error: 'Article not found' });
     const cfg = readConfig();
     const tpl = template || cfg.default_template || 'minimal';
