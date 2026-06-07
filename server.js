@@ -312,6 +312,33 @@ async function articleExists(slug) {
   return articleBlobMeta.has(safe);
 }
 
+async function bootstrapSampleToBlob() {
+  if (!blobStorage.isBlobEnabled()) return;
+  if (DATA_DIR === ROOT) return;
+  const sampleSrc = path.join(DRAFTS_SRC, 'sample.md');
+  if (!fs.existsSync(sampleSrc)) return;
+  try {
+    await refreshArticleBlobMeta();
+    if (articleBlobMeta.has('sample')) return;
+    const body = fs.readFileSync(sampleSrc, 'utf-8');
+    const buffer = Buffer.from(body, 'utf-8');
+    const result = await blobStorage.put('articles/drafts/sample.md', buffer, {
+      access: 'public',
+      contentType: 'text/markdown',
+      allowOverwrite: false
+    });
+    articleBlobMeta.set('sample', {
+      url: result.url,
+      pathname: result.pathname,
+      uploadedAt: result.uploadedAt || new Date().toISOString()
+    });
+    console.log('[bootstrap] Seeded articles/drafts/sample.md to Blob');
+  } catch (err) {
+    console.error('[bootstrap] Failed to seed sample.md to Blob:', err.message);
+  }
+}
+bootstrapSampleToBlob();
+
 function renderMarkdown(content, template) {
   const cfg = readConfig();
   const tpl = template || cfg.default_template || 'minimal';
