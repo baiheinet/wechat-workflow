@@ -21,14 +21,12 @@ const CONFIG_SRC = path.join(DATA_SRC, 'config.json');
 const DRAFTS_DIR = path.join(DATA_DIR, 'articles', 'drafts');
 const READY_DIR = path.join(DATA_DIR, 'articles', 'ready');
 const PUBLISHED_DIR = path.join(DATA_DIR, 'articles', 'published');
-const TOPICS_DIR = path.join(DATA_DIR, 'topics');
 const PUBLIC_DIR = path.join(ROOT, 'public');
 
 function ensureDataDirs() {
   fs.mkdirSync(DRAFTS_DIR, { recursive: true });
   fs.mkdirSync(READY_DIR, { recursive: true });
   fs.mkdirSync(PUBLISHED_DIR, { recursive: true });
-  fs.mkdirSync(TOPICS_DIR, { recursive: true });
 }
 
 function bootstrapData() {
@@ -159,21 +157,6 @@ function slugify(s) {
 
 const ARTICLE_PREFIX = 'articles/drafts/';
 const articleBlobMeta = new Map();
-
-const TOPIC_PREFIX = 'topics/';
-const topicBlobMeta = new Map();
-
-const TOPIC_STATUSES = ['idea', 'researching', 'writing', 'done', 'published', 'shelved'];
-const TOPIC_STATUS_LABELS = {
-  idea: '想法',
-  researching: '预研',
-  writing: '写作中',
-  done: '已完成',
-  published: '已发布',
-  shelved: '搁置'
-};
-const TOPIC_PRIORITIES = ['P0', 'P1', 'P2', 'P3'];
-const TOPIC_PRIORITY_LABELS = { P0: 'P0 紧急', P1: 'P1 高', P2: 'P2 中', P3: 'P3 低' };
 
 const BLOB_NOT_CONFIGURED_ERROR = 'Blob Storage not configured — set BLOB_STORE_ID env var';
 
@@ -320,151 +303,6 @@ async function articleExists(slug) {
   return articleBlobMeta.has(safe);
 }
 
-function normalizeTopicStatus(s) {
-  if (Array.isArray(s) && s.length) s = s[0];
-  if (typeof s !== 'string') return 'idea';
-  const v = s.trim().toLowerCase();
-  if (TOPIC_STATUSES.includes(v)) return v;
-  // Accept Chinese labels for resilience
-  const inv = Object.fromEntries(Object.entries(TOPIC_STATUS_LABELS).map(([k, v]) => [v, k]));
-  return inv[s.trim()] || 'idea';
-}
-
-function normalizeTopicPriority(p) {
-  if (Array.isArray(p) && p.length) p = p[0];
-  if (typeof p !== 'string') return 'P2';
-  const v = p.trim().toUpperCase();
-  if (TOPIC_PRIORITIES.includes(v)) return v;
-  return 'P2';
-}
-
-function topicPathname(slug) {
-  return `${TOPIC_PREFIX}${slug}.md`;
-}
-
-function topicFromFrontmatter(slug, fm, fallbackUpdatedAt) {
-  return {
-    slug,
-    title: fm.title || slug,
-    summary: fm.summary || '',
-    source: fm.source || '',
-    status: normalizeTopicStatus(fm.status),
-    priority: normalizeTopicPriority(fm.priority),
-    linkedArticle: fm.linkedArticle || '',
-    tags: fm.tags || [],
-    createdAt: normalizeDate(fm.createdAt),
-    updatedAt: normalizeDate(fm.updatedAt) || fallbackUpdatedAt || new Date().toISOString()
-  };
-}
-
-async function refreshTopicBlobMeta() {
-  topicBlobMeta.clear();
-  const result = await blobStorage.list({ prefix: TOPIC_PREFIX });
-  for (const b of result.blobs) {
-    const m = b.pathname.match(/^topics\/(.+)\.md$/);
-    if (!m) continue;
-    topicBlobMeta.set(m[1], { url: b.url, pathname: b.pathname, uploadedAt: b.uploadedAt });
-  }
-  return topicBlobMeta;
-}
-
-async function listTopics() {
-  requireBlob();
-  await refreshTopicBlobMeta();
-  const items = [];
-  for (const [slug, meta] of topicBlobMeta) {
-    try {
-      const text = await fetchBlobText(meta.url);
-      const parsed = matter(text);
-      items.push(topicFromFrontmatter(slug, parsed.data, meta.uploadedAt));
-    } catch (err) {
-      items.push(topicFromFrontmatter(slug, {}, meta.uploadedAt));
-    }
-  }
-  items.sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
-  return items;
-}
-
-async function readTopic(slug) {
-  requireBlob();
-  const safe = safeSlug(slug);
-  if (!safe) return null;
-  if (!topicBlobMeta.has(safe)) {
-    await refreshTopicBlobMeta();
-  }
-  const meta = topicBlobMeta.get(safe);
-  if (!meta) return null;
-  const text = await fetchBlobText(meta.url);
-  const parsed = matter(text);
-  return {
-    slug: safe,
-    title: parsed.data.title || safe,
-    summary: parsed.data.summary || '',
-    source: parsed.data.source || '',
-    status: normalizeTopicStatus(parsed.data.status),
-    priority: normalizeTopicPriority(parsed.data.priority),
-    linkedArticle: parsed.data.linkedArticle || '',
-    tags: parsed.data.tags || [],
-    content: parsed.content || '',
-    frontmatter: parsed.data,
-    createdAt: normalizeDate(parsed.data.createdAt),
-    updatedAt: normalizeDate(parsed.data.updatedAt) || meta.uploadedAt || ''
-  };
-}
-
-async function writeTopic(slug, payload) {
-  requireBlob();
-  const safe = safeSlug(slug);
-  if (!safe) throw new Error('Invalid slug');
-  const now = new Date().toISOString();
-  const fm = {
-    title: payload.title || safe,
-    summary: payload.summary || '',
-    source: payload.source || '',
-    status: normalizeTopicStatus(payload.status),
-    priority: normalizeTopicPriority(payload.priority),
-    linkedArticle: payload.linkedArticle || '',
-    tags: payload.tags || [],
-    createdAt: payload.createdAt || now,
-    updatedAt: now
-  };
-  const content = payload.content || '';
-  const body = matter.stringify(content, fm);
-  const pathname = topicPathname(safe);
-  const buffer = Buffer.from(body, 'utf-8');
-  const result = await blobStorage.put(pathname, buffer, {
-    access: 'public',
-    contentType: 'text/markdown',
-    allowOverwrite: true
-  });
-  topicBlobMeta.set(safe, { url: result.url, pathname: result.pathname, uploadedAt: result.uploadedAt || now });
-  return { slug: safe, pathname: result.pathname, url: result.url };
-}
-
-async function deleteTopic(slug) {
-  requireBlob();
-  const safe = safeSlug(slug);
-  if (!topicBlobMeta.has(safe)) {
-    await refreshTopicBlobMeta();
-  }
-  const meta = topicBlobMeta.get(safe);
-  if (meta) {
-    await blobStorage.del(meta.url);
-    topicBlobMeta.delete(safe);
-  }
-  return { slug: safe, deleted: true };
-}
-
-async function topicExists(slug) {
-  requireBlob();
-  const safe = safeSlug(slug);
-  if (!safe) return false;
-  if (!topicBlobMeta.has(safe)) {
-    await refreshTopicBlobMeta();
-  }
-  return topicBlobMeta.has(safe);
-}
-
 function renderMarkdown(content, template) {
   const cfg = readConfig();
   const tpl = template || cfg.default_template || 'minimal';
@@ -592,82 +430,6 @@ app.put('/api/articles/:slug', async (req, res, next) => {
 app.delete('/api/articles/:slug', async (req, res, next) => {
   try {
     const result = await deleteArticle(req.params.slug);
-    res.json({ ok: true, ...result });
-  } catch (err) { next(err); }
-});
-
-app.get('/api/topics/meta', (req, res) => {
-  res.json({
-    statuses: TOPIC_STATUSES.map(s => ({ value: s, label: TOPIC_STATUS_LABELS[s] })),
-    priorities: TOPIC_PRIORITIES.map(p => ({ value: p, label: TOPIC_PRIORITY_LABELS[p] }))
-  });
-});
-
-app.get('/api/topics', async (req, res, next) => {
-  try { res.json(await listTopics()); }
-  catch (err) { next(err); }
-});
-
-app.get('/api/topics/:slug', async (req, res, next) => {
-  try {
-    const topic = await readTopic(req.params.slug);
-    if (!topic) return res.status(404).json({ error: 'Not found' });
-    res.json(topic);
-  } catch (err) { next(err); }
-});
-
-app.post('/api/topics', async (req, res, next) => {
-  try {
-    const body = req.body || {};
-    const title = (body.title || '').trim();
-    if (!title) return res.status(400).json({ error: 'title is required' });
-    const status = normalizeTopicStatus(body.status);
-    const priority = normalizeTopicPriority(body.priority);
-    const slug = slugify(body.slug || title);
-    if (await topicExists(slug)) {
-      return res.status(409).json({ error: `Topic "${slug}" already exists` });
-    }
-    const result = await writeTopic(slug, {
-      title,
-      summary: body.summary || '',
-      source: body.source || '',
-      status,
-      priority,
-      linkedArticle: body.linkedArticle || '',
-      tags: body.tags || [],
-      content: body.content || ''
-    });
-    res.status(201).json({ ok: true, slug: result.slug });
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
-app.put('/api/topics/:slug', async (req, res, next) => {
-  try {
-    const existing = await readTopic(req.params.slug);
-    if (!existing) return res.status(404).json({ error: 'Not found' });
-    const body = req.body || {};
-    const payload = {
-      ...existing,
-      ...body,
-      slug: existing.slug,
-      status: normalizeTopicStatus(body.status || existing.status),
-      priority: normalizeTopicPriority(body.priority || existing.priority)
-    };
-    if (typeof body.title === 'string' && body.title.trim()) {
-      payload.title = body.title.trim();
-    }
-    await writeTopic(existing.slug, payload);
-    res.json({ ok: true, slug: existing.slug });
-  } catch (err) {
-    next(err);
-  }
-});
-
-app.delete('/api/topics/:slug', async (req, res, next) => {
-  try {
-    const result = await deleteTopic(req.params.slug);
     res.json({ ok: true, ...result });
   } catch (err) { next(err); }
 });
