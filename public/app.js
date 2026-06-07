@@ -252,12 +252,6 @@
   }
 
   function setStatus(kind, text) {
-    const dot = $('#status-dot');
-    const t = $('#status-text');
-    dot.classList.remove('is-ok', 'is-down');
-    if (kind === 'ok') dot.classList.add('is-ok');
-    else if (kind === 'down') dot.classList.add('is-down');
-    t.textContent = text;
     const sdot = $('#health-dot');
     const st = $('#health-text');
     if (sdot) { sdot.classList.remove('is-ok', 'is-down', 'is-warn');
@@ -1516,14 +1510,8 @@ function hello() {
     });
     const viewArticles = $('#view-articles');
     const viewTopics = $('#view-topics');
-    if (viewArticles) {
-      viewArticles.hidden = name !== 'articles';
-      viewArticles.style.display = name === 'articles' ? '' : 'none';
-    }
-    if (viewTopics) {
-      viewTopics.hidden = name !== 'topics';
-      viewTopics.style.display = name === 'topics' ? '' : 'none';
-    }
+    if (viewArticles) viewArticles.style.display = name === 'articles' ? '' : 'none';
+    if (viewTopics) viewTopics.style.display = name === 'topics' ? '' : 'none';
     if (name === 'topics') {
       if (state.topics.length === 0) {
         refreshTopicList().catch(err => console.warn('refreshTopicList failed', err));

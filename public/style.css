@@ -855,10 +855,7 @@ input, textarea, select { font: inherit; color: inherit; }
   box-shadow: var(--shadow-sm);
 }
 
-[data-view="topics"][hidden],
-[data-view="articles"][hidden] {
-  display: none !important;
-}
+
 
 /* === Topic board === */
 .board {

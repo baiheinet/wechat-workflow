@@ -16,10 +16,7 @@
       <button class="topbar-nav-item is-active" id="nav-articles" type="button" role="tab" aria-selected="true" data-view="articles">写作</button>
       <button class="topbar-nav-item" id="nav-topics" type="button" role="tab" aria-selected="false" data-view="topics">选题看板</button>
     </nav>
-    <div class="topbar-status" id="topbar-status" title="后端健康状态">
-      <span class="status-dot" id="status-dot" aria-hidden="true"></span>
-      <span class="status-text" id="status-text">连接中…</span>
-    </div>
+
     <div class="topbar-actions">
       <label class="topbar-field" for="template-select">
         <span>模板</span>
@@ -94,7 +91,7 @@
     </section>
   </main>
 
-  <section class="board" id="view-topics" data-view="topics" hidden aria-label="选题看板">
+  <section class="board" id="view-topics" data-view="topics" style="display:none" aria-label="选题看板">
     <div class="board-head">
       <div class="board-head-left">
         <h2 class="board-title">选题看板</h2>
