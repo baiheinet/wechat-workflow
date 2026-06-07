@@ -12,10 +12,11 @@
       <span class="brand-mark">W</span>
       <span class="brand-name">WeChat Workflow</span>
     </div>
-    <div class="topbar-status" id="topbar-status" title="后端健康状态">
-      <span class="status-dot" id="status-dot" aria-hidden="true"></span>
-      <span class="status-text" id="status-text">连接中…</span>
-    </div>
+    <nav class="topbar-nav" role="tablist" aria-label="主导航">
+      <button class="topbar-nav-item is-active" id="nav-articles" type="button" role="tab" aria-selected="true" data-view="articles">写作</button>
+      <button class="topbar-nav-item" id="nav-topics" type="button" role="tab" aria-selected="false" data-view="topics">选题看板</button>
+    </nav>
+
     <div class="topbar-actions">
       <label class="topbar-field" for="template-select">
         <span>模板</span>
@@ -89,6 +90,43 @@
       <iframe id="preview-frame" class="preview-frame" title="渲染预览" sandbox="allow-same-origin"></iframe>
     </section>
   </main>
+
+  <section class="board" id="view-topics" data-view="topics" style="display:none" aria-label="选题看板">
+    <div class="board-head">
+      <div class="board-head-left">
+        <h2 class="board-title">选题看板</h2>
+        <span id="topic-count" class="muted">0 个</span>
+        <input id="topic-search" class="input board-search" type="search" placeholder="搜索标题/摘要/来源" aria-label="搜索选题" />
+      </div>
+      <div class="board-head-right">
+        <div class="view-switch" role="tablist" aria-label="视图切换">
+          <button class="view-switch-btn is-active" data-board-view="kanban" type="button" role="tab" aria-selected="true">看板</button>
+          <button class="view-switch-btn" data-board-view="list" type="button" role="tab" aria-selected="false">列表</button>
+        </div>
+        <button id="btn-new-topic" class="btn btn-primary" type="button">+ 新建选题</button>
+      </div>
+    </div>
+    <div class="board-body">
+      <div class="kanban" id="kanban-board" role="list" aria-label="看板泳道"></div>
+      <div class="topic-list-wrap" id="topic-list-wrap" hidden>
+        <table class="topic-list-table" aria-label="选题列表">
+          <thead>
+            <tr>
+              <th>标题</th>
+              <th>状态</th>
+              <th>优先级</th>
+              <th>来源</th>
+              <th>关联文章</th>
+              <th>更新时间</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="topic-list-body"></tbody>
+        </table>
+        <div class="topic-list-empty" id="topic-list-empty" hidden>暂无选题，点击右上角「+ 新建选题」开始</div>
+      </div>
+    </div>
+  </section>
 
   <div id="modal-root" class="modal-root" aria-live="polite"></div>
   <div id="toast-root" class="toast-root" aria-live="polite" aria-atomic="false"></div>

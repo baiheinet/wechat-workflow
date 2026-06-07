@@ -240,12 +240,6 @@
   }
 
   function setStatus(kind, text) {
-    const dot = $('#status-dot');
-    const t = $('#status-text');
-    dot.classList.remove('is-ok', 'is-down');
-    if (kind === 'ok') dot.classList.add('is-ok');
-    else if (kind === 'down') dot.classList.add('is-down');
-    t.textContent = text;
     const sdot = $('#health-dot');
     const st = $('#health-text');
     if (sdot) { sdot.classList.remove('is-ok', 'is-down', 'is-warn');
@@ -1415,6 +1409,635 @@ function hello() {
       console.warn('seed sample article failed', err);
     }
   }
+
+  const SAMPLE_TOPICS = [
+    {
+      title: 'AI 写作工具横评：Claude / GPT / DeepSeek 实测对比',
+      summary: '从「公众号写作」这个具体场景出发，对比三款主流大模型在中文长文、配图指令、Markdown 严谨度上的表现，附真实 prompt 样例。',
+      source: 'https://anthropic.com/news',
+      status: 'idea',
+      priority: 'P1'
+    },
+    {
+      title: '我用 Vercel Blob 做公众号素材库的一年',
+      summary: '讲讲把图片/封面托管在 Vercel Blob 上的真实账单、踩坑与备份策略，适合个人创作者。',
+      source: 'vercel.com/docs/storage',
+      status: 'researching',
+      priority: 'P2'
+    },
+    {
+      title: '从 0 到 1000 粉：一个技术公众号的复盘',
+      summary: '记录 6 个月内从 0 到 1000 关注者的过程，重点讲内容选题、排版迭代和发布节奏。',
+      source: '内部回顾',
+      status: 'writing',
+      priority: 'P0'
+    },
+    {
+      title: '微信草稿箱自动化：把 Markdown 推送到公众号的 5 个方案',
+      summary: '微信 API 调通的踩坑全记录，从最简单的 curl 到 webhook 自动化。',
+      source: 'developers.weixin.qq.com',
+      status: 'done',
+      priority: 'P2'
+    }
+  ];
+
+  async function seedSampleTopics() {
+    try {
+      for (const t of SAMPLE_TOPICS) {
+        try {
+          await api.createTopic(t);
+        } catch (err) {
+          if (!/409|already exists/i.test(err.message || '')) {
+            console.warn('seed sample topic failed', err);
+          }
+        }
+      }
+      await refreshTopicList();
+      toast(`已载入 ${SAMPLE_TOPICS.length} 个示例选题`, 'success', 4000);
+    } catch (err) {
+      console.warn('seed sample topics failed', err);
+    }
+  }
+
+  // === Topic board ===
+
+  const TOPIC_STATUSES = [
+    { value: 'idea', label: '想法' },
+    { value: 'researching', label: '预研' },
+    { value: 'writing', label: '写作中' },
+    { value: 'done', label: '已完成' },
+    { value: 'published', label: '已发布' },
+    { value: 'shelved', label: '搁置' }
+  ];
+
+  const TOPIC_PRIORITIES = [
+    { value: 'P0', label: 'P0 紧急' },
+    { value: 'P1', label: 'P1 高' },
+    { value: 'P2', label: 'P2 中' },
+    { value: 'P3', label: 'P3 低' }
+  ];
+
+  const statusMeta = (value) => TOPIC_STATUSES.find(s => s.value === value) || { value, label: value };
+  const priorityMeta = (value) => TOPIC_PRIORITIES.find(p => p.value === value) || { value, label: value };
+
+  function setActiveView(name) {
+    state.view = name;
+    $$('.topbar-nav-item').forEach(btn => {
+      const active = btn.dataset.view === name;
+      btn.classList.toggle('is-active', active);
+      btn.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+    const viewArticles = $('#view-articles');
+    const viewTopics = $('#view-topics');
+    if (viewArticles) viewArticles.style.display = name === 'articles' ? '' : 'none';
+    if (viewTopics) viewTopics.style.display = name === 'topics' ? '' : 'none';
+    if (name === 'topics') {
+      if (state.topics.length === 0) {
+        refreshTopicList().catch(err => console.warn('refreshTopicList failed', err));
+      } else {
+        renderBoard();
+      }
+    }
+  }
+
+  async function refreshTopicList() {
+    const [topics, meta] = await Promise.all([
+      api.listTopics().catch(err => { console.warn('listTopics failed', err); return []; }),
+      state.topicsMeta.statuses.length ? Promise.resolve(state.topicsMeta) : api.getTopicsMeta().catch(() => null)
+    ]);
+    state.topics = topics || [];
+    state.topicsBySlug = new Map(state.topics.map(t => [t.slug, t]));
+    if (meta) state.topicsMeta = meta;
+    renderBoard();
+  }
+
+  function filterTopics() {
+    const q = (state.topicSearch || '').toLowerCase().trim();
+    if (!q) return state.topics.slice();
+    return state.topics.filter(t => {
+      const hay = `${t.title} ${t.summary || ''} ${t.source || ''} ${(t.tags || []).join(' ')}`.toLowerCase();
+      return hay.includes(q);
+    });
+  }
+
+  function renderBoard() {
+    const items = filterTopics();
+    $('#topic-count').textContent = `${items.length} / ${state.topics.length} 个`;
+    if (state.boardView === 'kanban') {
+      renderKanban(items);
+    } else {
+      renderTopicListTable(items);
+    }
+  }
+
+  function renderKanban(items) {
+    const board = $('#kanban-board');
+    const list = $('#topic-list-wrap');
+    if (!board) return;
+    if (list) list.hidden = true;
+    board.hidden = false;
+    board.innerHTML = '';
+    for (const st of TOPIC_STATUSES) {
+      const lane = document.createElement('div');
+      lane.className = 'kanban-lane';
+      lane.dataset.status = st.value;
+      const head = document.createElement('div');
+      head.className = 'kanban-lane-head';
+      const title = document.createElement('div');
+      title.className = 'kanban-lane-title';
+      const dot = document.createElement('span');
+      dot.className = `kanban-lane-dot is-${st.value}`;
+      title.append(dot, document.createTextNode(st.label));
+      const count = document.createElement('span');
+      count.className = 'kanban-lane-count';
+      const laneItems = items.filter(t => t.status === st.value);
+      count.textContent = laneItems.length;
+      head.append(title, count);
+      lane.appendChild(head);
+      const body = document.createElement('div');
+      body.className = 'kanban-lane-body';
+      body.dataset.status = st.value;
+      attachLaneDnD(body);
+      for (const t of laneItems) body.appendChild(buildTopicCard(t));
+      lane.appendChild(body);
+      board.appendChild(lane);
+    }
+  }
+
+  function renderTopicListTable(items) {
+    const board = $('#kanban-board');
+    const list = $('#topic-list-wrap');
+    if (!list) return;
+    if (board) board.hidden = true;
+    list.hidden = false;
+    const tbody = $('#topic-list-body');
+    const empty = $('#topic-list-empty');
+    tbody.innerHTML = '';
+    if (!items.length) {
+      empty.hidden = false;
+      return;
+    }
+    empty.hidden = true;
+    items.sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
+    for (const t of items) {
+      const tr = document.createElement('tr');
+      tr.dataset.slug = t.slug;
+      const titleCell = document.createElement('td');
+      titleCell.className = 'topic-list-title';
+      titleCell.textContent = t.title;
+      titleCell.title = t.title;
+      const statusCell = document.createElement('td');
+      const statusEl = document.createElement('span');
+      const sm = statusMeta(t.status);
+      statusEl.className = `topic-list-status is-${t.status}`;
+      statusEl.textContent = sm.label;
+      statusCell.appendChild(statusEl);
+      const prioCell = document.createElement('td');
+      const prioEl = document.createElement('span');
+      prioEl.className = `topic-priority is-${t.priority}`;
+      prioEl.textContent = t.priority;
+      prioCell.appendChild(prioEl);
+      const sourceCell = document.createElement('td');
+      sourceCell.className = 'topic-list-source';
+      sourceCell.textContent = t.source || '—';
+      sourceCell.title = t.source || '';
+      const linkCell = document.createElement('td');
+      if (t.linkedArticle) {
+        const a = document.createElement('a');
+        a.href = '#';
+        a.className = 'topic-linked';
+        a.textContent = `📄 ${t.linkedArticle}`;
+        a.title = `跳转到文章: ${t.linkedArticle}`;
+        a.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          jumpToArticle(t.linkedArticle);
+        });
+        linkCell.appendChild(a);
+      } else {
+        linkCell.textContent = '—';
+        linkCell.style.color = 'var(--fg-muted)';
+      }
+      const dateCell = document.createElement('td');
+      dateCell.textContent = t.updatedAt ? formatDate(t.updatedAt) : '—';
+      const actionsCell = document.createElement('td');
+      const actions = document.createElement('div');
+      actions.className = 'topic-list-actions';
+      const editBtn = document.createElement('button');
+      editBtn.className = 'topic-card-action';
+      editBtn.textContent = '编辑';
+      editBtn.title = '编辑选题';
+      editBtn.addEventListener('click', (e) => { e.stopPropagation(); openTopicModal(t); });
+      const articleBtn = document.createElement('button');
+      articleBtn.className = 'topic-card-action';
+      articleBtn.textContent = '建文章';
+      articleBtn.title = '从选题创建文章';
+      articleBtn.addEventListener('click', (e) => { e.stopPropagation(); createArticleFromTopic(t); });
+      const delBtn = document.createElement('button');
+      delBtn.className = 'topic-card-action';
+      delBtn.textContent = '删除';
+      delBtn.title = '删除选题';
+      delBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        confirmDialog(`确定删除选题「${t.title}」？此操作不可撤销。`, { title: '删除选题', danger: true, okText: '删除' })
+          .then(ok => { if (ok) deleteTopic(t); });
+      });
+      actions.append(editBtn, articleBtn, delBtn);
+      actionsCell.appendChild(actions);
+      tr.append(titleCell, statusCell, prioCell, sourceCell, linkCell, dateCell, actionsCell);
+      tr.addEventListener('click', () => openTopicModal(t));
+      tbody.appendChild(tr);
+    }
+  }
+
+  function buildTopicCard(topic) {
+    const card = document.createElement('div');
+    card.className = 'topic-card';
+    card.draggable = true;
+    card.dataset.slug = topic.slug;
+    const title = document.createElement('div');
+    title.className = 'topic-card-title';
+    title.textContent = topic.title;
+    card.appendChild(title);
+    if (topic.summary) {
+      const summary = document.createElement('div');
+      summary.className = 'topic-card-summary';
+      summary.textContent = topic.summary;
+      card.appendChild(summary);
+    }
+    const meta = document.createElement('div');
+    meta.className = 'topic-card-meta';
+    const prio = document.createElement('span');
+    prio.className = `topic-priority is-${topic.priority}`;
+    prio.textContent = topic.priority;
+    meta.appendChild(prio);
+    if (topic.source) {
+      const src = document.createElement('span');
+      src.className = 'topic-card-source';
+      src.textContent = `🔗 ${topic.source}`;
+      src.title = topic.source;
+      meta.appendChild(src);
+    }
+    if (topic.linkedArticle) {
+      const link = document.createElement('a');
+      link.className = 'topic-linked';
+      link.href = '#';
+      link.textContent = `📄 ${topic.linkedArticle}`;
+      link.title = `跳转到文章: ${topic.linkedArticle}`;
+      link.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        jumpToArticle(topic.linkedArticle);
+      });
+      meta.appendChild(link);
+    }
+    card.appendChild(meta);
+    const foot = document.createElement('div');
+    foot.className = 'topic-card-foot';
+    const updated = document.createElement('span');
+    updated.textContent = topic.updatedAt ? formatDate(topic.updatedAt) : '';
+    foot.appendChild(updated);
+    const actions = document.createElement('div');
+    actions.className = 'topic-card-actions';
+    const editBtn = document.createElement('button');
+    editBtn.className = 'topic-card-action';
+    editBtn.textContent = '✎';
+    editBtn.title = '编辑';
+    editBtn.addEventListener('click', (e) => { e.stopPropagation(); openTopicModal(topic); });
+    const articleBtn = document.createElement('button');
+    articleBtn.className = 'topic-card-action';
+    articleBtn.textContent = '📄';
+    articleBtn.title = '从选题创建文章';
+    articleBtn.addEventListener('click', (e) => { e.stopPropagation(); createArticleFromTopic(topic); });
+    const delBtn = document.createElement('button');
+    delBtn.className = 'topic-card-action';
+    delBtn.textContent = '🗑';
+    delBtn.title = '删除';
+    delBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      confirmDialog(`确定删除选题「${topic.title}」？此操作不可撤销。`, { title: '删除选题', danger: true, okText: '删除' })
+        .then(ok => { if (ok) deleteTopic(topic); });
+    });
+    actions.append(editBtn, articleBtn, delBtn);
+    foot.appendChild(actions);
+    card.appendChild(foot);
+    card.addEventListener('dblclick', () => openTopicModal(topic));
+    attachCardDnD(card);
+    return card;
+  }
+
+  // === Drag and drop ===
+  function attachCardDnD(card) {
+    card.addEventListener('dragstart', (e) => {
+      state.drag = { slug: card.dataset.slug, fromStatus: card.parentElement?.dataset.status || '' };
+      e.dataTransfer.effectAllowed = 'move';
+      try { e.dataTransfer.setData('text/plain', card.dataset.slug); } catch (err) { /* ignore */ }
+      requestAnimationFrame(() => card.classList.add('is-dragging'));
+    });
+    card.addEventListener('dragend', () => {
+      card.classList.remove('is-dragging');
+      state.drag = null;
+      $$('.kanban-lane.is-drop-target').forEach(el => el.classList.remove('is-drop-target'));
+    });
+  }
+
+  function attachLaneDnD(lane) {
+    lane.addEventListener('dragover', (e) => {
+      if (!state.drag) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      lane.classList.add('is-drop-target');
+    });
+    lane.addEventListener('dragleave', (e) => {
+      if (e.target === lane) lane.classList.remove('is-drop-target');
+    });
+    lane.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      lane.classList.remove('is-drop-target');
+      const slug = state.drag?.slug || (e.dataTransfer && e.dataTransfer.getData('text/plain'));
+      if (!slug) return;
+      const newStatus = lane.dataset.status;
+      const topic = state.topicsBySlug.get(slug);
+      if (!topic) return;
+      if (topic.status === newStatus) return;
+      try {
+        const updated = await api.updateTopic(slug, { status: newStatus });
+        state.topicsBySlug.set(slug, { ...topic, status: newStatus, updatedAt: updated.updatedAt || new Date().toISOString() });
+        const idx = state.topics.findIndex(t => t.slug === slug);
+        if (idx >= 0) state.topics[idx] = { ...state.topics[idx], status: newStatus, updatedAt: updated.updatedAt || new Date().toISOString() };
+        renderBoard();
+        toast(`已切换状态: ${statusMeta(newStatus).label}`, 'success');
+      } catch (err) {
+        toast(`更新状态失败: ${err.message}`, 'error');
+      }
+    });
+  }
+
+  // === Topic modal (create / edit) ===
+  function openTopicModal(topic) {
+    const isEdit = !!topic;
+    const body = document.createElement('div');
+
+    const titleRow = document.createElement('div');
+    titleRow.className = 'form-row';
+    const titleLabel = document.createElement('label');
+    titleLabel.textContent = '标题';
+    const titleInput = document.createElement('input');
+    titleInput.type = 'text';
+    titleInput.value = topic?.title || '';
+    titleInput.placeholder = '一句话讲清楚这个选题';
+    titleInput.required = true;
+    titleRow.append(titleLabel, titleInput);
+    body.appendChild(titleRow);
+
+    const summaryRow = document.createElement('div');
+    summaryRow.className = 'form-row';
+    const summaryLabel = document.createElement('label');
+    summaryLabel.textContent = '摘要';
+    const summaryInput = document.createElement('textarea');
+    summaryInput.className = 'is-summary';
+    summaryInput.placeholder = '两三句话说明核心观点或读者价值';
+    summaryInput.value = topic?.summary || '';
+    summaryRow.append(summaryLabel, summaryInput);
+    body.appendChild(summaryRow);
+
+    const sourceRow = document.createElement('div');
+    sourceRow.className = 'form-row';
+    const sourceLabel = document.createElement('label');
+    sourceLabel.textContent = '来源（可选）';
+    const sourceInput = document.createElement('input');
+    sourceInput.type = 'text';
+    sourceInput.placeholder = '例: 公众号「XXX」2026-05 文章 / Twitter @xxx';
+    sourceInput.value = topic?.source || '';
+    sourceRow.append(sourceLabel, sourceInput);
+    body.appendChild(sourceRow);
+
+    const inlineRow = document.createElement('div');
+    inlineRow.className = 'form-row is-inline';
+    const statusWrap = document.createElement('div');
+    const statusLabel = document.createElement('label');
+    statusLabel.textContent = '状态';
+    const statusSelect = document.createElement('select');
+    for (const s of TOPIC_STATUSES) {
+      const opt = document.createElement('option');
+      opt.value = s.value;
+      opt.textContent = s.label;
+      if ((topic?.status || 'idea') === s.value) opt.selected = true;
+      statusSelect.appendChild(opt);
+    }
+    statusWrap.append(statusLabel, statusSelect);
+    const prioWrap = document.createElement('div');
+    const prioLabel = document.createElement('label');
+    prioLabel.textContent = '优先级';
+    const prioSelect = document.createElement('select');
+    for (const p of TOPIC_PRIORITIES) {
+      const opt = document.createElement('option');
+      opt.value = p.value;
+      opt.textContent = p.label;
+      if ((topic?.priority || 'P2') === p.value) opt.selected = true;
+      prioSelect.appendChild(opt);
+    }
+    prioWrap.append(prioLabel, prioSelect);
+    inlineRow.append(statusWrap, prioWrap);
+    body.appendChild(inlineRow);
+
+    const linkRow = document.createElement('div');
+    linkRow.className = 'form-row';
+    const linkLabel = document.createElement('label');
+    linkLabel.textContent = '关联文章 slug（可选）';
+    const linkInput = document.createElement('input');
+    linkInput.type = 'text';
+    linkInput.placeholder = '例如 my-first-post';
+    linkInput.value = topic?.linkedArticle || '';
+    linkRow.append(linkLabel, linkInput);
+    body.appendChild(linkRow);
+
+    const helper = document.createElement('div');
+    helper.className = 'form-helper';
+    helper.textContent = '提示：拖拽卡片可快速切换「状态」；双击卡片或点击「✎」可重新打开此面板。';
+    body.appendChild(helper);
+
+    const foot = document.createElement('div');
+    foot.style.display = 'flex';
+    foot.style.gap = '8px';
+    if (isEdit) {
+      const createArticleBtn = document.createElement('button');
+      createArticleBtn.className = 'btn btn-accent';
+      createArticleBtn.textContent = '📄 从选题创建文章';
+      createArticleBtn.addEventListener('click', async () => {
+        p.close('create-article');
+      });
+      foot.appendChild(createArticleBtn);
+    }
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'btn';
+    cancelBtn.textContent = '取消';
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'btn btn-primary';
+    saveBtn.textContent = isEdit ? '保存' : '创建';
+    foot.append(cancelBtn, saveBtn);
+
+    const p = modal({ title: isEdit ? '编辑选题' : '新建选题', body, footer: foot, width: '560px' });
+    setTimeout(() => titleInput.focus(), 0);
+
+    cancelBtn.onclick = () => p.close(null);
+    saveBtn.onclick = async () => {
+      const titleVal = titleInput.value.trim();
+      if (!titleVal) {
+        toast('请填写标题', 'warn');
+        titleInput.focus();
+        return;
+      }
+      const payload = {
+        title: titleVal,
+        summary: summaryInput.value.trim(),
+        source: sourceInput.value.trim(),
+        status: statusSelect.value,
+        priority: prioSelect.value,
+        linkedArticle: linkInput.value.trim()
+      };
+      saveBtn.disabled = true;
+      saveBtn.classList.add('chip-loading');
+      try {
+        if (isEdit) {
+          await api.updateTopic(topic.slug, payload);
+          toast('选题已更新', 'success');
+        } else {
+          await api.createTopic(payload);
+          toast('选题已创建', 'success');
+        }
+        p.close('saved');
+        await refreshTopicList();
+      } catch (err) {
+        toast(`${isEdit ? '更新' : '创建'}失败: ${err.message}`, 'error');
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.classList.remove('chip-loading');
+      }
+    };
+    p.then(async (result) => {
+      if (result === 'create-article' && isEdit) {
+        await refreshTopicList();
+        const fresh = state.topicsBySlug.get(topic.slug) || topic;
+        createArticleFromTopic(fresh);
+      }
+    });
+  }
+
+  async function deleteTopic(topic) {
+    try {
+      await api.deleteTopic(topic.slug);
+      state.topics = state.topics.filter(t => t.slug !== topic.slug);
+      state.topicsBySlug.delete(topic.slug);
+      renderBoard();
+      toast('选题已删除', 'success');
+    } catch (err) {
+      toast(`删除失败: ${err.message}`, 'error');
+    }
+  }
+
+  function jumpToArticle(slug) {
+    if (!slug) return;
+    setActiveView('articles');
+    state.articlesBySlug = state.articlesBySlug || new Map();
+    if (!state.articlesBySlug.has(slug)) {
+      toast(`文章 ${slug} 不在当前列表`, 'warn');
+      return;
+    }
+    selectArticle(slug);
+  }
+
+  function buildArticleFromTopic(topic) {
+    const title = topic.title || '未命名';
+    const lines = [];
+    lines.push(`# ${title}`);
+    lines.push('');
+    if (topic.summary) {
+      const sumLines = String(topic.summary).split(/\r?\n/);
+      for (const line of sumLines) {
+        lines.push(`> ${line}`);
+      }
+      lines.push('');
+    }
+    if (topic.source) {
+      lines.push(`> 来源：${topic.source}`);
+      lines.push('');
+    }
+    lines.push('## 正文');
+    lines.push('');
+    lines.push('（在此处展开内容…）');
+    lines.push('');
+    if (topic.source) {
+      lines.push('---');
+      lines.push(`*本文选题来源：${topic.source}*`);
+    }
+    return lines.join('\n');
+  }
+
+  async function createArticleFromTopic(topic) {
+    if (!topic) return;
+    if (state.dirty && state.activeArticle) {
+      try { await flushSave(); } catch (err) { /* ignore */ }
+    }
+    const content = buildArticleFromTopic(topic);
+    const title = topic.title || '未命名';
+    try {
+      const result = await api.createArticle({
+        title,
+        author: '',
+        content,
+        tags: [],
+        status: 'draft'
+      });
+      if (result && result.slug) {
+        try {
+          await api.updateTopic(topic.slug, { linkedArticle: result.slug });
+          const idx = state.topics.findIndex(t => t.slug === topic.slug);
+          if (idx >= 0) state.topics[idx] = { ...state.topics[idx], linkedArticle: result.slug };
+          state.topicsBySlug.set(topic.slug, { ...(state.topicsBySlug.get(topic.slug) || topic), linkedArticle: result.slug });
+        } catch (linkErr) {
+          console.warn('link topic to article failed', linkErr);
+        }
+        await refreshArticleList();
+        setActiveView('articles');
+        await selectArticle(result.slug);
+        toast(`已从选题「${topic.title}」创建文章`, 'success');
+      }
+    } catch (err) {
+      toast(`创建文章失败: ${err.message}`, 'error');
+    }
+  }
+
+  function bindTopicEvents() {
+    const navArticles = $('#nav-articles');
+    const navTopics = $('#nav-topics');
+    if (navArticles) navArticles.addEventListener('click', () => setActiveView('articles'));
+    if (navTopics) navTopics.addEventListener('click', () => setActiveView('topics'));
+
+    const newTopicBtn = $('#btn-new-topic');
+    if (newTopicBtn) newTopicBtn.addEventListener('click', () => openTopicModal(null));
+
+    $$('.view-switch-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const v = btn.dataset.boardView;
+        if (!v) return;
+        state.boardView = v;
+        $$('.view-switch-btn').forEach(b => {
+          const active = b.dataset.boardView === v;
+          b.classList.toggle('is-active', active);
+          b.setAttribute('aria-selected', active ? 'true' : 'false');
+        });
+        renderBoard();
+      });
+    });
+
+    const search = $('#topic-search');
+    if (search) search.addEventListener('input', (e) => {
+      state.topicSearch = e.target.value;
+      renderBoard();
+    });
+  }
+
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
