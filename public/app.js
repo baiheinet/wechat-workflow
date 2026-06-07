@@ -106,7 +106,11 @@
     render(payload) { return this._fetch('/api/render', { method: 'POST', body: JSON.stringify(payload) }); },
     convert(payload) { return this._fetch('/api/convert', { method: 'POST', body: JSON.stringify(payload) }); },
     publish(payload) { return this._fetch('/api/publish', { method: 'POST', body: JSON.stringify(payload) }); },
-    generateImage(payload) { return this._fetch('/api/generate-image', { method: 'POST', body: JSON.stringify(payload) }); }
+    generateImage(payload) { return this._fetch('/api/generate-image', { method: 'POST', body: JSON.stringify(payload) }); },
+    getStats(params) {
+      const qs = params ? '?' + new URLSearchParams(params).toString() : '';
+      return this._fetch('/api/stats' + qs);
+    }
   };
 
   function toast(message, type = 'info', duration = 3500) {
@@ -624,6 +628,239 @@
     p.then(() => {});
   }
 
+  function formatStay(percent) {
+    if (percent == null || isNaN(percent)) return '—';
+    const n = Number(percent);
+    return `${(n * 100).toFixed(1)}%`;
+  }
+
+  function flattenStatsList(list) {
+    const rows = [];
+    for (const day of list || []) {
+      const ref = day.ref_date || '';
+      for (const d of day.details || []) {
+        rows.push({
+          ref_date: ref,
+          msgid: d.msgid,
+          title: d.title || '(无标题)',
+          target_user: d.target_user,
+          int_page_read_user: d.int_page_read_user,
+          int_page_read_count: d.int_page_read_count,
+          share_user: d.share_user,
+          share_count: d.share_count,
+          add_to_fav_user: d.add_to_fav_user,
+          add_to_fav_count: d.add_to_fav_count,
+          ori_page_read_user: d.ori_page_read_user,
+          stay_offline_percent: d.stay_offline_percent
+        });
+      }
+    }
+    rows.sort((a, b) => (a.ref_date < b.ref_date ? 1 : a.ref_date > b.ref_date ? -1 : 0));
+    return rows;
+  }
+
+  function renderStatsTable(rows) {
+    const totals = rows.reduce((acc, r) => {
+      acc.int_page_read_user += Number(r.int_page_read_user) || 0;
+      acc.int_page_read_count += Number(r.int_page_read_count) || 0;
+      acc.share_user += Number(r.share_user) || 0;
+      acc.add_to_fav_user += Number(r.add_to_fav_user) || 0;
+      acc.ori_page_read_user += Number(r.ori_page_read_user) || 0;
+      return acc;
+    }, { int_page_read_user: 0, int_page_read_count: 0, share_user: 0, add_to_fav_user: 0, ori_page_read_user: 0 });
+    const stayVals = rows.map(r => Number(r.stay_offline_percent)).filter(n => !isNaN(n));
+    const avgStay = stayVals.length ? stayVals.reduce((a, b) => a + b, 0) / stayVals.length : null;
+
+    const table = document.createElement('table');
+    table.className = 'stats-table';
+    table.innerHTML = `
+      <thead>
+        <tr>
+          <th>日期</th>
+          <th>文章</th>
+          <th>阅读人数</th>
+          <th>阅读次数</th>
+          <th>分享人数</th>
+          <th>收藏人数</th>
+          <th>原文阅读</th>
+          <th>留存率</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+      <tfoot>
+        <tr class="stats-summary">
+          <td colspan="2">合计（${rows.length} 条）</td>
+          <td>${totals.int_page_read_user}</td>
+          <td>${totals.int_page_read_count}</td>
+          <td>${totals.share_user}</td>
+          <td>${totals.add_to_fav_user}</td>
+          <td>${totals.ori_page_read_user}</td>
+          <td>${formatStay(avgStay)}</td>
+        </tr>
+      </tfoot>
+    `;
+    const tbody = table.querySelector('tbody');
+    if (rows.length === 0) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td colspan="8" class="stats-empty">该时段内无数据</td>`;
+      tbody.appendChild(tr);
+      return table;
+    }
+    for (const r of rows) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${r.ref_date}</td>
+        <td class="stats-title">${escapeHtml(r.title)}</td>
+        <td>${r.int_page_read_user}</td>
+        <td>${r.int_page_read_count}</td>
+        <td>${r.share_user}</td>
+        <td>${r.add_to_fav_user}</td>
+        <td>${r.ori_page_read_user}</td>
+        <td>${formatStay(r.stay_offline_percent)}</td>
+      `;
+      tbody.appendChild(tr);
+    }
+    return table;
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, ch => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[ch]));
+  }
+
+  async function openStats() {
+    const body = document.createElement('div');
+
+    const rangeWrap = document.createElement('div');
+    rangeWrap.className = 'stats-range';
+    const chips = [
+      { v: 7, label: '7天' },
+      { v: 30, label: '30天' },
+      { v: 90, label: '90天' }
+    ];
+    let currentRange = { days: 7 };
+    function makeChip(c) {
+      const b = document.createElement('button');
+      b.className = 'filter-chip';
+      b.type = 'button';
+      b.textContent = c.label;
+      b.dataset.days = c.v;
+      if (c.v === 7) b.classList.add('is-active');
+      b.addEventListener('click', () => {
+        chips.forEach(x => x.elem.classList.remove('is-active'));
+        b.classList.add('is-active');
+        customDate.style.display = 'none';
+        currentRange = { days: c.v };
+        runFetch();
+      });
+      c.elem = b;
+      return b;
+    }
+    chips.forEach(c => rangeWrap.appendChild(makeChip(c)));
+    const customChip = document.createElement('button');
+    customChip.className = 'filter-chip';
+    customChip.type = 'button';
+    customChip.textContent = '自定义';
+    customChip.addEventListener('click', () => {
+      chips.forEach(x => x.elem.classList.remove('is-active'));
+      customChip.classList.add('is-active');
+      customDate.style.display = '';
+      const today = new Date();
+      const week = new Date(today.getTime() - 6 * 86400000);
+      endInput.value = today.toISOString().slice(0, 10);
+      startInput.value = week.toISOString().slice(0, 10);
+    });
+    rangeWrap.appendChild(customChip);
+    body.appendChild(rangeWrap);
+
+    const customDate = document.createElement('div');
+    customDate.className = 'stats-custom';
+    customDate.style.display = 'none';
+    const startLabel = document.createElement('label');
+    startLabel.textContent = '开始日期';
+    const startInput = document.createElement('input');
+    startInput.type = 'date';
+    startInput.className = 'input';
+    const endLabel = document.createElement('label');
+    endLabel.textContent = '结束日期';
+    const endInput = document.createElement('input');
+    endInput.type = 'date';
+    endInput.className = 'input';
+    const applyBtn = document.createElement('button');
+    applyBtn.className = 'btn';
+    applyBtn.type = 'button';
+    applyBtn.textContent = '查询';
+    applyBtn.addEventListener('click', () => {
+      if (!startInput.value || !endInput.value) {
+        toast('请选择起止日期', 'warn');
+        return;
+      }
+      if (startInput.value > endInput.value) {
+        toast('开始日期不能晚于结束日期', 'warn');
+        return;
+      }
+      currentRange = { start: startInput.value, end: endInput.value };
+      runFetch();
+    });
+    customDate.append(startLabel, startInput, endLabel, endInput, applyBtn);
+    body.appendChild(customDate);
+
+    const meta = document.createElement('div');
+    meta.className = 'stats-meta muted';
+    meta.textContent = '加载中…';
+    body.appendChild(meta);
+
+    const tableSlot = document.createElement('div');
+    tableSlot.className = 'stats-slot';
+    body.appendChild(tableSlot);
+
+    const foot = document.createElement('div');
+    foot.style.display = 'flex';
+    foot.style.gap = '8px';
+    foot.style.justifyContent = 'flex-end';
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'btn';
+    closeBtn.textContent = '关闭';
+    foot.appendChild(closeBtn);
+
+    const p = modal({ title: '📊 数据复盘', body, footer: foot, width: '760px' });
+    closeBtn.onclick = () => p.close(null);
+
+    let lastReqToken = 0;
+    async function runFetch() {
+      const myToken = ++lastReqToken;
+      tableSlot.innerHTML = '';
+      meta.textContent = '加载中…';
+      try {
+        const data = await api.getStats(currentRange);
+        if (myToken !== lastReqToken) return;
+        const rows = flattenStatsList(data.list);
+        meta.textContent = `区间: ${data.range.start} → ${data.range.end} · 共 ${rows.length} 条记录`;
+        tableSlot.appendChild(renderStatsTable(rows));
+      } catch (err) {
+        if (myToken !== lastReqToken) return;
+        meta.textContent = '';
+        const empty = document.createElement('div');
+        empty.className = 'stats-empty-block';
+        const body2 = err.body || {};
+        if (err.status === 400 && /credentials/i.test(body2.error || err.message)) {
+          empty.innerHTML = `
+            <div class="stats-empty-title">微信凭据未配置</div>
+            <div class="stats-empty-hint muted">请在「设置」中填写 app_id 和 app_secret，或设置 WECHAT_APP_ID / WECHAT_APP_SECRET 环境变量后重启服务。</div>
+          `;
+        } else {
+          empty.innerHTML = `
+            <div class="stats-empty-title">加载失败</div>
+            <div class="stats-empty-hint muted">${escapeHtml(body2.error || err.message)}</div>
+          `;
+        }
+        tableSlot.appendChild(empty);
+      }
+    }
+    runFetch();
+  }
+
   async function openGenerateImage(type) {
     if (!state.activeArticle) {
       toast('请先选中或新建一篇文章', 'warn');
@@ -1011,6 +1248,7 @@
     $('#btn-save').addEventListener('click', () => flushSave().then(() => toast('已保存')));
     $('#btn-convert').addEventListener('click', exportHtml);
     $('#btn-publish').addEventListener('click', publishArticle);
+    $('#btn-stats').addEventListener('click', openStats);
     $('#btn-settings').addEventListener('click', openSettings);
 
     $('#template-select').addEventListener('change', () => {

@@ -573,6 +573,55 @@ app.get('/api/prompt-presets', (req, res) => {
   res.json({ presets: PROMPT_PRESETS });
 });
 
+function isoDate(d) {
+  return d.toISOString().slice(0, 10);
+}
+
+function isValidDate(s) {
+  return typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && !isNaN(new Date(s).getTime());
+}
+
+function resolveStatsRange(query) {
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  if (query.start && query.end) {
+    if (!isValidDate(query.start) || !isValidDate(query.end)) {
+      const err = new Error('start/end must be YYYY-MM-DD');
+      err.status = 400;
+      throw err;
+    }
+    if (query.start > query.end) {
+      const err = new Error('start must be on or before end');
+      err.status = 400;
+      throw err;
+    }
+    return { start: query.start, end: query.end };
+  }
+  const days = Math.max(1, Math.min(365, parseInt(query.days, 10) || 7));
+  const end = isoDate(today);
+  const start = new Date(today.getTime() - (days - 1) * 86400000);
+  return { start: isoDate(start), end };
+}
+
+app.get('/api/stats', async (req, res, next) => {
+  try {
+    const cfg = readConfig();
+    const wechat = cfg.wechat || {};
+    if (!(wechat.app_id && wechat.app_secret) && !(process.env.WECHAT_APP_ID && process.env.WECHAT_APP_SECRET)) {
+      return res.status(400).json({ error: 'WeChat credentials not configured' });
+    }
+    const range = resolveStatsRange(req.query || {});
+    const result = await wechatApi.getArticleTotal(range.start, range.end);
+    res.json({
+      range,
+      list: (result && result.list) || []
+    });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    next(err);
+  }
+});
+
 app.use(express.static(PUBLIC_DIR, { maxAge: '1h' }));
 
 app.get(/^\/(?!api).*/, (req, res, next) => {

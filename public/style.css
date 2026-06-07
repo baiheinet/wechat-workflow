@@ -738,3 +738,91 @@ input, textarea, select { font: inherit; color: inherit; }
   .topbar-actions { gap: 4px; }
   .topbar-field span { display: none; }
 }
+
+.stats-range {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.stats-custom {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.stats-custom label { font-size: 12px; color: var(--muted); }
+.stats-custom input[type="date"] {
+  font: inherit;
+  padding: 4px 8px;
+  border: 1px solid var(--border, #d0d7de);
+  border-radius: 6px;
+  background: var(--surface, #fff);
+  color: var(--fg, #1f2328);
+}
+
+.stats-meta {
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+
+.stats-slot {
+  max-height: 60vh;
+  overflow: auto;
+  border: 1px solid var(--border, #e6e8eb);
+  border-radius: 6px;
+}
+
+.stats-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.stats-table th,
+.stats-table td {
+  padding: 6px 10px;
+  text-align: right;
+  border-bottom: 1px solid var(--border, #eef0f2);
+  white-space: nowrap;
+}
+.stats-table th:first-child,
+.stats-table td:first-child,
+.stats-table th:nth-child(2),
+.stats-table td:nth-child(2) {
+  text-align: left;
+}
+.stats-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--surface, #f6f8fa);
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--muted, #57606a);
+}
+.stats-table tbody tr:hover { background: var(--hover, #f0f4f8); }
+.stats-table .stats-title { max-width: 280px; overflow: hidden; text-overflow: ellipsis; }
+.stats-table .stats-empty {
+  text-align: center;
+  color: var(--muted, #57606a);
+  padding: 20px;
+}
+.stats-table tfoot .stats-summary {
+  position: sticky;
+  bottom: 0;
+  background: var(--accent-soft, #eef3ff);
+  font-weight: 600;
+}
+.stats-table tfoot .stats-summary td {
+  border-top: 2px solid var(--border, #d0d7de);
+  border-bottom: none;
+}
+
+.stats-empty-block {
+  padding: 24px;
+  text-align: center;
+}
+.stats-empty-title { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+.stats-empty-hint { font-size: 12px; line-height: 1.5; }
+
