@@ -68,40 +68,40 @@
   }
 
   function modal({ title, body, footer, width }) {
-    return new Promise((resolve) => {
-      const tpl = $('#tpl-modal').content.cloneNode(true);
-      const root = $('#modal-root');
-      const node = tpl.querySelector('[data-modal]');
-      const bodyEl = node.querySelector('[data-body]');
-      const footEl = node.querySelector('[data-foot]');
-      const titleEl = node.querySelector('.modal-title');
-      if (title) titleEl.textContent = title;
-      if (body instanceof Node) bodyEl.appendChild(body);
-      else if (typeof body === 'string') bodyEl.innerHTML = body;
-      if (footer) {
-        if (footer instanceof Node) footEl.appendChild(footer);
-        else if (typeof footer === 'string') footEl.innerHTML = footer;
-      } else {
-        footEl.remove();
-      }
-      if (width) node.querySelector('.modal').style.width = width;
-      node.addEventListener('click', (e) => {
-        if (e.target === node) close(null);
-        if (e.target.closest('[data-action="close"]')) close(null);
-      });
-      const escHandler = (e) => {
-        if (e.key === 'Escape') { close(null); document.removeEventListener('keydown', escHandler); }
-      };
-      document.addEventListener('keydown', escHandler);
-      root.appendChild(node);
-
-      function close(value) {
-        node.remove();
-        document.removeEventListener('keydown', escHandler);
-        resolve(value);
-      }
-      return { close, root: node };
+    let resolve_;
+    const promise = new Promise((resolve) => { resolve_ = resolve; });
+    const tpl = $('#tpl-modal').content.cloneNode(true);
+    const root = $('#modal-root');
+    const node = tpl.querySelector('[data-modal]');
+    const bodyEl = node.querySelector('[data-body]');
+    const footEl = node.querySelector('[data-foot]');
+    const titleEl = node.querySelector('.modal-title');
+    if (title) titleEl.textContent = title;
+    if (body instanceof Node) bodyEl.appendChild(body);
+    else if (typeof body === 'string') bodyEl.innerHTML = body;
+    if (footer) {
+      if (footer instanceof Node) footEl.appendChild(footer);
+      else if (typeof footer === 'string') footEl.innerHTML = footer;
+    } else {
+      footEl.remove();
+    }
+    if (width) node.querySelector('.modal').style.width = width;
+    function close(value) {
+      node.remove();
+      document.removeEventListener('keydown', escHandler);
+      resolve_(value);
+    }
+    node.addEventListener('click', (e) => {
+      if (e.target === node) close(null);
+      if (e.target.closest('[data-action="close"]')) close(null);
     });
+    const escHandler = (e) => {
+      if (e.key === 'Escape') { close(null); document.removeEventListener('keydown', escHandler); }
+    };
+    document.addEventListener('keydown', escHandler);
+    root.appendChild(node);
+    promise.close = close;
+    return promise;
   }
 
   function confirmDialog(message, opts = {}) {
