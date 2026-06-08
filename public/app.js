@@ -110,7 +110,13 @@
     getStats(params) {
       const qs = params ? '?' + new URLSearchParams(params).toString() : '';
       return this._fetch('/api/stats' + qs);
-    }
+    },
+    getTopicsMeta() { return this._fetch('/api/topics/meta'); },
+    listTopics() { return this._fetch('/api/topics'); },
+    getTopic(slug) { return this._fetch(`/api/topics/${encodeURIComponent(slug)}`); },
+    createTopic(payload) { return this._fetch('/api/topics', { method: 'POST', body: JSON.stringify(payload) }); },
+    updateTopic(slug, payload) { return this._fetch(`/api/topics/${encodeURIComponent(slug)}`, { method: 'PUT', body: JSON.stringify(payload) }); },
+    deleteTopic(slug) { return this._fetch(`/api/topics/${encodeURIComponent(slug)}`, { method: 'DELETE' }); }
   };
 
   function toast(message, type = 'info', duration = 3500) {
@@ -1297,6 +1303,7 @@
 
   function init() {
     bindEvents();
+    bindTopicEvents();
     setStatus('warn', '连接中…');
     Promise.all([
       api.health().catch(err => { throw err; }),
@@ -1489,8 +1496,12 @@ function hello() {
     });
     const viewArticles = $('#view-articles');
     const viewTopics = $('#view-topics');
-    if (viewArticles) viewArticles.style.display = name === 'articles' ? '' : 'none';
-    if (viewTopics) viewTopics.style.display = name === 'topics' ? '' : 'none';
+    if (viewArticles) {
+      viewArticles.style.display = name === 'articles' ? '' : 'none';
+    }
+    if (viewTopics) {
+      viewTopics.style.display = name === 'topics' ? '' : 'none';
+    }
     if (name === 'topics') {
       if (state.topics.length === 0) {
         refreshTopicList().catch(err => console.warn('refreshTopicList failed', err));
