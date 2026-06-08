@@ -1303,6 +1303,7 @@
 
   function init() {
     bindEvents();
+    bindTopicEvents();
     setStatus('warn', '连接中…');
     Promise.all([
       api.health().catch(err => { throw err; }),
