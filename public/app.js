@@ -1496,11 +1496,9 @@ function hello() {
     const viewArticles = $('#view-articles');
     const viewTopics = $('#view-topics');
     if (viewArticles) {
-      viewArticles.hidden = name !== 'articles';
       viewArticles.style.display = name === 'articles' ? '' : 'none';
     }
     if (viewTopics) {
-      viewTopics.hidden = name !== 'topics';
       viewTopics.style.display = name === 'topics' ? '' : 'none';
     }
     if (name === 'topics') {
