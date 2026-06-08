@@ -110,7 +110,13 @@
     getStats(params) {
       const qs = params ? '?' + new URLSearchParams(params).toString() : '';
       return this._fetch('/api/stats' + qs);
-    }
+    },
+    getTopicsMeta() { return this._fetch('/api/topics/meta'); },
+    listTopics() { return this._fetch('/api/topics'); },
+    getTopic(slug) { return this._fetch(`/api/topics/${encodeURIComponent(slug)}`); },
+    createTopic(payload) { return this._fetch('/api/topics', { method: 'POST', body: JSON.stringify(payload) }); },
+    updateTopic(slug, payload) { return this._fetch(`/api/topics/${encodeURIComponent(slug)}`, { method: 'PUT', body: JSON.stringify(payload) }); },
+    deleteTopic(slug) { return this._fetch(`/api/topics/${encodeURIComponent(slug)}`, { method: 'DELETE' }); }
   };
 
   function toast(message, type = 'info', duration = 3500) {
