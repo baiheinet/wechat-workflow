@@ -1514,7 +1514,7 @@ function hello() {
   async function refreshTopicList() {
     const [topics, meta] = await Promise.all([
       api.listTopics().catch(err => { console.warn('listTopics failed', err); return []; }),
-      state.topicsMeta.statuses.length ? Promise.resolve(state.topicsMeta) : api.getTopicsMeta().catch(() => null)
+      state.topicsMeta && state.topicsMeta.statuses && state.topicsMeta.statuses.length ? Promise.resolve(state.topicsMeta) : api.getTopicsMeta().catch(() => null)
     ]);
     state.topics = topics || [];
     state.topicsBySlug = new Map(state.topics.map(t => [t.slug, t]));
