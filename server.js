@@ -218,7 +218,7 @@ async function refreshArticleBlobMeta() {
   for (const b of result.blobs) {
     const m = b.pathname.match(/^articles\/drafts\/(.+)\.md$/);
     if (!m) continue;
-    articleBlobMeta.set(m[1], { url: b.url, pathname: b.pathname, uploadedAt: b.uploadedAt });
+    articleBlobMeta.set(m[1], { url: b.url, pathname: b.pathname, uploadedAt: b.uploadedAt instanceof Date ? b.uploadedAt.toISOString() : String(b.uploadedAt || '') });
   }
   return articleBlobMeta;
 }
@@ -292,7 +292,7 @@ async function writeArticle(slug, payload) {
     contentType: 'text/markdown',
     allowOverwrite: true
   });
-  articleBlobMeta.set(safe, { url: result.url, pathname: result.pathname, uploadedAt: result.uploadedAt || new Date().toISOString() });
+  articleBlobMeta.set(safe, { url: result.url, pathname: result.pathname, uploadedAt: result.uploadedAt instanceof Date ? result.uploadedAt.toISOString() : String(result.uploadedAt || new Date().toISOString()) });
   return { slug: safe, pathname: result.pathname, url: result.url };
 }
 
@@ -764,7 +764,7 @@ app.get('/api/assets', async (req, res, next) => {
         url: b.url,
         pathname: b.pathname,
         size: b.size,
-        uploadedAt: b.uploadedAt,
+        uploadedAt: b.uploadedAt instanceof Date ? b.uploadedAt.toISOString() : String(b.uploadedAt || ''),
         contentType: b.contentType || 'image/png',
         storage: 'blob'
       };
