@@ -2032,6 +2032,13 @@ function hello() {
 
     const newTopicBtn = $('#btn-new-topic');
     if (newTopicBtn) newTopicBtn.addEventListener('click', () => openTopicModal(null));
+    const refreshTopicsBtn = $('#btn-refresh-topics');
+    if (refreshTopicsBtn) refreshTopicsBtn.addEventListener('click', () => {
+      refreshTopicsBtn.classList.add('spinning');
+      refreshTopicList().catch(err => console.warn('refreshTopicList failed', err)).finally(() => {
+        refreshTopicsBtn.classList.remove('spinning');
+      });
+    });
 
     $$('.view-switch-btn').forEach(btn => {
       btn.addEventListener('click', () => {

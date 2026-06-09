@@ -203,6 +203,19 @@ input, textarea, select { font: inherit; color: inherit; }
 
 .btn-block { width: 100%; }
 
+.btn-ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--fg-soft);
+  font-size: 16px;
+  padding: 6px 8px;
+}
+.btn-ghost:hover { background: var(--bg-soft); color: var(--fg); }
+.spinning {
+  animation: spin 0.6s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
 .input {
   width: 100%;
   background: var(--bg-elev);
