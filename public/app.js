@@ -21,7 +21,12 @@
     saveInFlight: false,
     lastSavedAt: null,
     promptPresets: {},
-    promptPresetCatalog: null
+    promptPresetCatalog: null,
+    topics: [],
+    topicsBySlug: new Map(),
+    topicsMeta: null,
+    boardView: 'kanban',
+    topicSearch: ''
   };
 
   const PROMPT_PRESETS_KEY = 'wechatwf.promptPresets.v1';
