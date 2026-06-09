@@ -364,7 +364,7 @@ async function refreshTopicBlobMeta() {
   for (const b of result.blobs) {
     const m = b.pathname.match(/^topics\/(.+)\.md$/);
     if (!m) continue;
-    topicBlobMeta.set(m[1], { url: b.url, pathname: b.pathname, uploadedAt: b.uploadedAt });
+    topicBlobMeta.set(m[1], { url: b.url, pathname: b.pathname, uploadedAt: b.uploadedAt instanceof Date ? b.uploadedAt.toISOString() : String(b.uploadedAt || '') });
   }
   return topicBlobMeta;
 }
@@ -438,7 +438,7 @@ async function writeTopic(slug, payload) {
     contentType: 'text/markdown',
     allowOverwrite: true
   });
-  topicBlobMeta.set(safe, { url: result.url, pathname: result.pathname, uploadedAt: result.uploadedAt || now });
+  topicBlobMeta.set(safe, { url: result.url, pathname: result.pathname, uploadedAt: result.uploadedAt instanceof Date ? result.uploadedAt.toISOString() : String(result.uploadedAt || now) });
   return { slug: safe, pathname: result.pathname, url: result.url };
 }
 
