@@ -146,5 +146,9 @@
   </template>
 
   <script src="/app.js" defer></script>
+  <script type="module">
+    import { injectSpeedInsights } from '/speed-insights.mjs';
+    injectSpeedInsights();
+  </script>
 </body>
 </html>
