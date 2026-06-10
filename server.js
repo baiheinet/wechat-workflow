@@ -861,6 +861,13 @@ app.get('/api/stats', async (req, res, next) => {
   }
 });
 
+// Serve Vercel Speed Insights script
+app.get('/_vercel/speed-insights/script.js', (req, res) => {
+  const scriptPath = path.join(ROOT, 'node_modules/@vercel/speed-insights/dist/index.mjs');
+  res.type('application/javascript');
+  res.sendFile(scriptPath);
+});
+
 app.use(express.static(PUBLIC_DIR, { maxAge: '1h' }));
 
 app.get(/^\/(?!api).*/, (req, res, next) => {
