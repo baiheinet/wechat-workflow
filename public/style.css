@@ -1352,3 +1352,249 @@ input, textarea, select { font: inherit; color: inherit; }
 }
 
 
+
+/* === Format View (排版美化) === */
+.view-format {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - var(--topbar-h));
+  background: var(--bg);
+}
+
+.format-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.format-header .view-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.format-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.format-controls label {
+  font-size: 13px;
+  color: var(--fg-muted);
+}
+
+.format-controls select {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  font-size: 13px;
+}
+
+.format-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.format-editor-pane,
+.format-preview-pane {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.format-editor-pane {
+  border-right: 1px solid var(--border);
+}
+
+.format-editor-header,
+.format-preview-header {
+  padding: 8px 16px;
+  background: var(--bg-soft);
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--fg-muted);
+}
+
+.format-editor {
+  flex: 1;
+  padding: 16px;
+  border: none;
+  resize: none;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: 1.6;
+  background: var(--surface);
+  color: var(--fg);
+}
+
+.format-editor:focus {
+  outline: none;
+}
+
+.format-preview-frame {
+  flex: 1;
+  border: none;
+  background: var(--surface);
+}
+
+/* === Preview View (预览审核) === */
+.view-preview {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - var(--topbar-h));
+  background: var(--bg);
+}
+
+.preview-header {
+  padding: 16px 20px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.preview-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.preview-article-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.preview-meta {
+  display: flex;
+  gap: 16px;
+  font-size: 13px;
+  color: var(--fg-muted);
+}
+
+.preview-container {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: var(--bg-soft);
+  overflow: auto;
+}
+
+.preview-device {
+  width: 390px;
+  height: 844px;
+  background: #000;
+  border-radius: 40px;
+  padding: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.mobile-preview-frame {
+  width: 100%;
+  height: 100%;
+  border: none;
+  border-radius: 32px;
+  background: #fff;
+}
+
+.preview-actions {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  padding: 16px 20px;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+
+/* === Research View (资料搜集) === */
+.view-research {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - var(--topbar-h));
+  background: var(--bg);
+}
+
+.research-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.research-header .view-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.research-article-title {
+  font-size: 14px;
+  color: var(--fg-muted);
+}
+
+.research-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  overflow: hidden;
+}
+
+.research-label {
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fg-muted);
+}
+
+.research-notes {
+  flex: 1;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  resize: none;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: 1.6;
+  background: var(--surface);
+  color: var(--fg);
+}
+
+.research-notes:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.research-actions {
+  padding: 16px 20px;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .format-layout {
+    grid-template-columns: 1fr;
+  }
+  
+  .format-editor-pane {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+  
+  .preview-device {
+    width: 320px;
+    height: 693px;
+  }
+}

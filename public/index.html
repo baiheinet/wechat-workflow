@@ -164,6 +164,68 @@
     </div>
   </section>
 
+  <!-- 排版美化视图 -->
+  <section class="view-format" id="view-format" data-view="format" hidden aria-label="排版美化">
+    <div class="format-header">
+      <h2 class="view-title">排版美化</h2>
+      <div class="format-controls">
+        <label for="format-template-select">模板：</label>
+        <select id="format-template-select" aria-label="排版模板"></select>
+      </div>
+    </div>
+    <div class="format-layout">
+      <div class="format-editor-pane">
+        <div class="format-editor-header">
+          <span class="format-editor-title">Markdown 编辑</span>
+        </div>
+        <textarea id="format-editor" class="format-editor" spellcheck="false" aria-label="Markdown 内容"></textarea>
+      </div>
+      <div class="format-preview-pane">
+        <div class="format-preview-header">
+          <span class="format-preview-title">预览效果</span>
+        </div>
+        <iframe id="format-preview-frame" class="format-preview-frame" title="排版预览" sandbox="allow-same-origin"></iframe>
+      </div>
+    </div>
+  </section>
+
+  <!-- 预览审核视图 -->
+  <section class="view-preview" id="view-preview" data-view="preview" hidden aria-label="预览审核">
+    <div class="preview-header">
+      <div class="preview-info">
+        <h2 class="preview-article-title" id="preview-article-title">未选择文章</h2>
+        <span class="preview-meta">
+          <span id="preview-template-name">模板：—</span>
+          <span id="preview-word-count">字数：0</span>
+        </span>
+      </div>
+    </div>
+    <div class="preview-container">
+      <div class="preview-device">
+        <iframe id="mobile-preview-frame" class="mobile-preview-frame" title="手机预览" sandbox="allow-same-origin"></iframe>
+      </div>
+    </div>
+    <div class="preview-actions">
+      <button id="btn-back-to-edit" class="btn" type="button">← 返回编辑</button>
+      <button id="btn-confirm-publish" class="btn btn-primary" type="button">确认发布 →</button>
+    </div>
+  </section>
+
+  <!-- 资料搜集视图 -->
+  <section class="view-research" id="view-research" data-view="research" hidden aria-label="资料搜集">
+    <div class="research-header">
+      <h2 class="view-title">资料搜集</h2>
+      <span class="research-article-title" id="research-article-title">未选择文章</span>
+    </div>
+    <div class="research-content">
+      <label for="research-notes" class="research-label">资料笔记（支持 Markdown）</label>
+      <textarea id="research-notes" class="research-notes" placeholder="在此记录你的资料搜集笔记...&#10;&#10;支持 Markdown 格式，如：&#10;- 参考资料链接&#10;- 关键数据&#10;- 采访记录" aria-label="资料笔记"></textarea>
+    </div>
+    <div class="research-actions">
+      <button id="btn-save-research" class="btn btn-primary" type="button">💾 保存资料</button>
+    </div>
+  </section>
+
   <div id="modal-root" class="modal-root" aria-live="polite"></div>
   <div id="toast-root" class="toast-root" aria-live="polite" aria-atomic="false"></div>
 
