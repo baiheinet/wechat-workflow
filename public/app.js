@@ -27,7 +27,8 @@
     topicsMeta: null,
     boardView: 'kanban',
     topicSearch: '',
-    currentStep: 'writing'
+    view: 'articles',
+    workflowStep: 'write'
   };
 
   const PROMPT_PRESETS_KEY = 'wechatwf.promptPresets.v1';
@@ -1253,7 +1254,6 @@
     $('#btn-new-article').addEventListener('click', newArticle);
     $('#btn-save').addEventListener('click', () => flushSave().then(() => toast('已保存')));
     $('#btn-convert').addEventListener('click', exportHtml);
-    $('#btn-publish').addEventListener('click', publishArticle);
     $('#btn-overflow').addEventListener('click', (e) => {
       e.stopPropagation();
       const dd = $('#overflow-dropdown');
@@ -1300,6 +1300,34 @@
 
     loadPromptPresets();
     updatePromptPresetIndicator();
+
+    // Workflow step navigation
+    const workflowSteps = $$('.workflow-step');
+    const workflowViewMap = {
+      topic: 'topics',
+      write: 'articles',
+      publish: 'publish',
+      stats: 'stats'
+    };
+    workflowSteps.forEach(step => {
+      step.addEventListener('click', () => {
+        const stepName = step.dataset.step;
+        const targetView = workflowViewMap[stepName];
+        if (targetView) {
+          if (targetView === 'topics') {
+            setActiveView('topics');
+          } else if (targetView === 'articles') {
+            setActiveView('articles');
+          } else if (targetView === 'publish') {
+            setActiveView('articles');
+            publishArticle();
+          } else if (targetView === 'stats') {
+            openStats();
+          }
+        }
+        setActiveWorkflowStep(stepName);
+      });
+    });
 
     document.addEventListener('keydown', (e) => {
       const meta = e.ctrlKey || e.metaKey;
@@ -1543,6 +1571,20 @@ function hello() {
       if (viewWriting) viewWriting.hidden = false;
       if (viewTopics) viewTopics.hidden = true;
     }
+    // Sync workflow step with view
+    const viewToStep = { topics: 'topic', articles: 'write' };
+    const stepName = viewToStep[name];
+    if (stepName) {
+      setActiveWorkflowStep(stepName);
+    }
+  }
+
+  function setActiveWorkflowStep(stepName) {
+    state.workflowStep = stepName;
+    $$('.workflow-step').forEach(step => {
+      const isActive = step.dataset.step === stepName;
+      step.classList.toggle('is-active', isActive);
+    });
   }
 
   async function refreshTopicList() {
