@@ -26,7 +26,8 @@
     topicsBySlug: new Map(),
     topicsMeta: null,
     boardView: 'kanban',
-    topicSearch: ''
+    topicSearch: '',
+    currentStep: 'writing'
   };
 
   const PROMPT_PRESETS_KEY = 'wechatwf.promptPresets.v1';
@@ -1253,8 +1254,27 @@
     $('#btn-save').addEventListener('click', () => flushSave().then(() => toast('已保存')));
     $('#btn-convert').addEventListener('click', exportHtml);
     $('#btn-publish').addEventListener('click', publishArticle);
-    $('#btn-stats').addEventListener('click', openStats);
-    $('#btn-settings').addEventListener('click', openSettings);
+    $('#btn-overflow').addEventListener('click', (e) => {
+      e.stopPropagation();
+      const dd = $('#overflow-dropdown');
+      dd.hidden = !dd.hidden;
+    });
+    document.addEventListener('click', (e) => {
+      const dd = $('#overflow-dropdown');
+      if (!dd.hidden && !e.target.closest('.overflow-wrap')) dd.hidden = true;
+    });
+    $('#btn-ov-publish').addEventListener('click', () => {
+      $('#overflow-dropdown').hidden = true;
+      publishArticle();
+    });
+    $('#btn-ov-stats').addEventListener('click', () => {
+      $('#overflow-dropdown').hidden = true;
+      openStats();
+    });
+    $('#btn-ov-settings').addEventListener('click', () => {
+      $('#overflow-dropdown').hidden = true;
+      openSettings();
+    });
 
     $('#template-select').addEventListener('change', () => {
       state.template = $('#template-select').value;
@@ -1309,6 +1329,7 @@
   function init() {
     bindEvents();
     bindTopicEvents();
+    setActiveStep('writing');
     setStatus('warn', '连接中…');
     Promise.all([
       api.health().catch(err => { throw err; }),
@@ -1492,27 +1513,35 @@ function hello() {
   const statusMeta = (value) => TOPIC_STATUSES.find(s => s.value === value) || { value, label: value };
   const priorityMeta = (value) => TOPIC_PRIORITIES.find(p => p.value === value) || { value, label: value };
 
-  function setActiveView(name) {
-    state.view = name;
-    $$('.topbar-nav-item').forEach(btn => {
-      const active = btn.dataset.view === name;
+  function setActiveStep(step) {
+    const prev = state.currentStep;
+    if (step === 'publish') {
+      publishArticle();
+      return;
+    }
+    if (step === 'stats') {
+      openStats();
+      return;
+    }
+    state.currentStep = step;
+    $$('.workflow-step').forEach(btn => {
+      const active = btn.dataset.step === step;
       btn.classList.toggle('is-active', active);
       btn.setAttribute('aria-selected', active ? 'true' : 'false');
     });
-    const viewArticles = $('#view-articles');
+    const viewWriting = $('#view-writing');
     const viewTopics = $('#view-topics');
-    if (viewArticles) {
-      viewArticles.style.display = name === 'articles' ? '' : 'none';
-    }
-    if (viewTopics) {
-      viewTopics.style.display = name === 'topics' ? '' : 'none';
-    }
-    if (name === 'topics') {
+    if (step === 'topics') {
+      if (viewWriting) viewWriting.hidden = true;
+      if (viewTopics) viewTopics.hidden = false;
       if (state.topics.length === 0) {
         refreshTopicList().catch(err => console.warn('refreshTopicList failed', err));
       } else {
         renderBoard();
       }
+    } else {
+      if (viewWriting) viewWriting.hidden = false;
+      if (viewTopics) viewTopics.hidden = true;
     }
   }
 
@@ -1954,7 +1983,7 @@ function hello() {
 
   function jumpToArticle(slug) {
     if (!slug) return;
-    setActiveView('articles');
+    setActiveStep('writing');
     state.articlesBySlug = state.articlesBySlug || new Map();
     if (!state.articlesBySlug.has(slug)) {
       toast(`文章 ${slug} 不在当前列表`, 'warn');
@@ -2015,7 +2044,7 @@ function hello() {
           console.warn('link topic to article failed', linkErr);
         }
         await refreshArticleList();
-        setActiveView('articles');
+        setActiveStep('writing');
         await selectArticle(result.slug);
         toast(`已从选题「${topic.title}」创建文章`, 'success');
       }
@@ -2025,10 +2054,12 @@ function hello() {
   }
 
   function bindTopicEvents() {
-    const navArticles = $('#nav-articles');
-    const navTopics = $('#nav-topics');
-    if (navArticles) navArticles.addEventListener('click', () => setActiveView('articles'));
-    if (navTopics) navTopics.addEventListener('click', () => setActiveView('topics'));
+    $$('.workflow-step').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const step = btn.dataset.step;
+        if (step) setActiveStep(step);
+      });
+    });
 
     const newTopicBtn = $('#btn-new-topic');
     if (newTopicBtn) newTopicBtn.addEventListener('click', () => openTopicModal(null));

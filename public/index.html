@@ -12,29 +12,52 @@
       <span class="brand-mark">W</span>
       <span class="brand-name">WeChat Workflow</span>
     </div>
-    <nav class="topbar-nav" role="tablist" aria-label="主导航">
-      <button class="topbar-nav-item is-active" id="nav-articles" type="button" role="tab" aria-selected="true" data-view="articles">写作</button>
-      <button class="topbar-nav-item" id="nav-topics" type="button" role="tab" aria-selected="false" data-view="topics">选题看板</button>
+    <nav class="workflow-nav" role="tablist" aria-label="写作流程">
+      <button class="workflow-step" data-step="topics" type="button" role="tab" aria-selected="false">
+        <span class="step-label">选题策划</span>
+      </button>
+      <span class="workflow-arrow" aria-hidden="true">→</span>
+      <button class="workflow-step is-active" data-step="writing" type="button" role="tab" aria-selected="true">
+        <span class="step-label">写作编辑</span>
+      </button>
+      <span class="workflow-arrow" aria-hidden="true">→</span>
+      <button class="workflow-step" data-step="publish" type="button" role="tab" aria-selected="false">
+        <span class="step-label">发布</span>
+      </button>
+      <span class="workflow-arrow" aria-hidden="true">→</span>
+      <button class="workflow-step" data-step="stats" type="button" role="tab" aria-selected="false">
+        <span class="step-label">数据复盘</span>
+      </button>
     </nav>
 
     <div class="topbar-actions">
-      <label class="topbar-field" for="template-select">
+      <label class="topbar-field" id="tpl-field" for="template-select">
         <span>模板</span>
         <select id="template-select" aria-label="排版模板"></select>
       </label>
-      <button id="btn-save" class="btn btn-primary" type="button">保存</button>
-      <button id="btn-convert" class="btn" type="button" title="导出 HTML 到 articles/ready/">导出 HTML</button>
-      <button id="btn-publish" class="btn btn-accent" type="button" title="推送到微信草稿箱">发布</button>
-      <button id="btn-stats" class="btn" type="button" title="数据复盘（微信公众号阅读/分享/收藏统计）">📊 数据复盘</button>
-      <button id="btn-settings" class="btn btn-icon" type="button" aria-label="设置" title="设置">
-        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
-          <path fill="currentColor" d="M19.14 12.94a7.14 7.14 0 0 0 .05-.94 7.14 7.14 0 0 0-.05-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.03 7.03 0 0 0-1.63-.94l-.36-2.54A.5.5 0 0 0 13.9 2h-3.84a.5.5 0 0 0-.5.42l-.36 2.54c-.59.24-1.13.55-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.7 8.48a.5.5 0 0 0 .12.64l2.03 1.58a7.14 7.14 0 0 0-.05.94c0 .32.02.63.05.94L2.82 14.16a.5.5 0 0 0-.12.64l1.92 3.32c.14.24.43.34.69.22l2.39-.96c.5.39 1.04.7 1.63.94l.36 2.54c.04.24.25.42.5.42h3.84c.25 0 .46-.18.5-.42l.36-2.54c.59-.24 1.13-.55 1.63-.94l2.39.96c.26.12.55.02.69-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z"/>
-        </svg>
-      </button>
+      <span id="step-actions">
+        <button id="btn-save" class="btn btn-primary" type="button">保存</button>
+        <button id="btn-convert" class="btn" type="button" title="导出 HTML">导出</button>
+      </span>
+      <div class="overflow-wrap">
+        <button id="btn-overflow" class="btn btn-icon" type="button" aria-label="更多操作" title="更多">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+            <circle cx="12" cy="5" r="2" fill="currentColor"/>
+            <circle cx="12" cy="12" r="2" fill="currentColor"/>
+            <circle cx="12" cy="19" r="2" fill="currentColor"/>
+          </svg>
+        </button>
+        <div class="overflow-dropdown" id="overflow-dropdown" hidden>
+          <button class="overflow-item" id="btn-ov-publish" type="button">🚀 发布</button>
+          <button class="overflow-item" id="btn-ov-stats" type="button">📊 数据复盘</button>
+          <div class="overflow-sep"></div>
+          <button class="overflow-item" id="btn-ov-settings" type="button">⚙️ 设置</button>
+        </div>
+      </div>
     </div>
   </header>
 
-  <main class="layout">
+  <main class="layout" id="view-writing" data-view="writing">
     <aside class="sidebar" aria-label="文章列表">
       <div class="sidebar-head">
         <button id="btn-new-article" class="btn btn-block" type="button">+ 新建文章</button>
@@ -91,7 +114,7 @@
     </section>
   </main>
 
-  <section class="board" id="view-topics" data-view="topics" style="display:none" aria-label="选题看板">
+  <section class="board" id="view-topics" data-view="topics" hidden aria-label="选题看板">
     <div class="board-head">
       <div class="board-head-left">
         <h2 class="board-title">选题看板</h2>
