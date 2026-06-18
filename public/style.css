@@ -1446,75 +1446,6 @@ input, textarea, select { font: inherit; color: inherit; }
   background: var(--surface);
 }
 
-/* === Preview View (预览审核) === */
-.view-preview {
-  display: flex;
-  flex-direction: column;
-  height: calc(100vh - var(--topbar-h));
-  background: var(--bg);
-}
-
-.preview-header {
-  padding: 16px 20px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-}
-
-.preview-info {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.preview-article-title {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 600;
-}
-
-.preview-meta {
-  display: flex;
-  gap: 16px;
-  font-size: 13px;
-  color: var(--fg-muted);
-}
-
-.preview-container {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-  background: var(--bg-soft);
-  overflow: auto;
-}
-
-.preview-device {
-  width: 390px;
-  height: 844px;
-  background: #000;
-  border-radius: 40px;
-  padding: 12px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-}
-
-.mobile-preview-frame {
-  width: 100%;
-  height: 100%;
-  border: none;
-  border-radius: 32px;
-  background: #fff;
-}
-
-.preview-actions {
-  display: flex;
-  justify-content: center;
-  gap: 12px;
-  padding: 16px 20px;
-  background: var(--surface);
-  border-top: 1px solid var(--border);
-}
-
 /* === Research View (资料搜集) === */
 .view-research {
   display: flex;
@@ -1591,10 +1522,5 @@ input, textarea, select { font: inherit; color: inherit; }
   .format-editor-pane {
     border-right: none;
     border-bottom: 1px solid var(--border);
-  }
-  
-  .preview-device {
-    width: 320px;
-    height: 693px;
   }
 }

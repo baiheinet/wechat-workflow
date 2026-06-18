@@ -1301,20 +1301,6 @@
       });
     }
 
-    // Preview view handlers
-    const btnBackToEdit = $('#btn-back-to-edit');
-    if (btnBackToEdit) {
-      btnBackToEdit.addEventListener('click', () => {
-        setActiveWorkflowStep('write');
-      });
-    }
-    const btnConfirmPublish = $('#btn-confirm-publish');
-    if (btnConfirmPublish) {
-      btnConfirmPublish.addEventListener('click', () => {
-        publishArticle();
-      });
-    }
-
     // Research view handlers
     const btnSaveResearch = $('#btn-save-research');
     if (btnSaveResearch) {
@@ -1627,7 +1613,7 @@ function hello() {
     });
     
     // Hide all views first
-    const allViews = ['view-writing', 'view-topics', 'view-format', 'view-preview', 'view-research'];
+    const allViews = ['view-writing', 'view-topics', 'view-format', 'view-research'];
     allViews.forEach(viewId => {
       const view = $(`#${viewId}`);
       if (view) view.hidden = true;
@@ -1646,10 +1632,6 @@ function hello() {
       const viewFormat = $('#view-format');
       if (viewFormat) viewFormat.hidden = false;
       syncFormatView();
-    } else if (step === 'preview') {
-      const viewPreview = $('#view-preview');
-      if (viewPreview) viewPreview.hidden = false;
-      syncPreviewView();
     } else if (step === 'research') {
       const viewResearch = $('#view-research');
       if (viewResearch) viewResearch.hidden = false;
@@ -1692,32 +1674,6 @@ function hello() {
     if (formatPreviewFrame && state.activeArticle) {
       const html = renderArticleHtml(state.activeArticle, state.template);
       formatPreviewFrame.srcdoc = html;
-    }
-  }
-
-  // Sync preview view with current article
-  function syncPreviewView() {
-    if (!state.activeArticle) return;
-    const previewArticleTitle = $('#preview-article-title');
-    const previewTemplateName = $('#preview-template-name');
-    const previewWordCount = $('#preview-word-count');
-    const mobilePreviewFrame = $('#mobile-preview-frame');
-    
-    if (previewArticleTitle) {
-      previewArticleTitle.textContent = state.activeArticle.title || '未命名文章';
-    }
-    if (previewTemplateName) {
-      const templateLabel = state.templates.find(t => t.name === state.template)?.label || state.template;
-      previewTemplateName.textContent = `模板：${templateLabel}`;
-    }
-    if (previewWordCount) {
-      const content = state.activeArticle.content || '';
-      const wordCount = content.replace(/\s/g, '').length;
-      previewWordCount.textContent = `字数：${wordCount}`;
-    }
-    if (mobilePreviewFrame && state.activeArticle) {
-      const html = renderArticleHtml(state.activeArticle, state.template);
-      mobilePreviewFrame.srcdoc = html;
     }
   }
 

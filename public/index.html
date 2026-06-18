@@ -29,10 +29,6 @@
         <span class="step-label">排版美化</span>
       </button>
       <span class="workflow-arrow" aria-hidden="true">→</span>
-      <button class="workflow-step" data-step="preview" type="button" role="tab" aria-selected="false">
-        <span class="step-label">预览审核</span>
-      </button>
-      <span class="workflow-arrow" aria-hidden="true">→</span>
       <button class="workflow-step" data-step="publish" type="button" role="tab" aria-selected="false">
         <span class="step-label">发布</span>
       </button>
@@ -186,28 +182,6 @@
         </div>
         <iframe id="format-preview-frame" class="format-preview-frame" title="排版预览" sandbox="allow-same-origin"></iframe>
       </div>
-    </div>
-  </section>
-
-  <!-- 预览审核视图 -->
-  <section class="view-preview" id="view-preview" data-view="preview" hidden aria-label="预览审核">
-    <div class="preview-header">
-      <div class="preview-info">
-        <h2 class="preview-article-title" id="preview-article-title">未选择文章</h2>
-        <span class="preview-meta">
-          <span id="preview-template-name">模板：—</span>
-          <span id="preview-word-count">字数：0</span>
-        </span>
-      </div>
-    </div>
-    <div class="preview-container">
-      <div class="preview-device">
-        <iframe id="mobile-preview-frame" class="mobile-preview-frame" title="手机预览" sandbox="allow-same-origin"></iframe>
-      </div>
-    </div>
-    <div class="preview-actions">
-      <button id="btn-back-to-edit" class="btn" type="button">← 返回编辑</button>
-      <button id="btn-confirm-publish" class="btn btn-primary" type="button">确认发布 →</button>
     </div>
   </section>
 
