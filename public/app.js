@@ -13,6 +13,8 @@
     activeTopicSlug: null,
     activeArticle: null,
     chatMessages: [],
+    templates: [],
+    template: localStorage.getItem('ww.template') || 'minimal',
     darkMode: window.matchMedia('(prefers-color-scheme: dark)').matches
   };
 
@@ -52,12 +54,15 @@
 
     Promise.all([
       api.listArticles().catch(() => []),
-      api.listTopics().catch(() => [])
-    ]).then(([articles, topics]) => {
+      api.listTopics().catch(() => []),
+      api.listTemplates().catch(() => [])
+    ]).then(([articles, topics, templates]) => {
       state.articles = articles;
       state.articlesBySlug = new Map(articles.map(a => [a.slug, a]));
       state.topics = topics;
       state.topicsBySlug = new Map(topics.map(t => [t.slug, t]));
+      state.templates = templates || [];
+      renderTemplateSelect();
       window.WW.tree.render();
       if (articles.length > 0) {
         selectArticle(articles[0].slug);
@@ -148,7 +153,7 @@
     if (!state.activeSlug) { toast('请先选择一篇文章', 'warn'); return; }
     await window.WW.editor.flushSave();
     try {
-      const result = await api.publish({ slug: state.activeSlug });
+      const result = await api.publish({ slug: state.activeSlug, template: state.template });
       toast('发布成功: ' + (result.mode || 'ok'), 'success');
     } catch (err) {
       toast('发布失败: ' + err.message, 'error');
@@ -159,7 +164,7 @@
     if (!state.activeSlug) { toast('请先选择一篇文章', 'warn'); return; }
     await window.WW.editor.flushSave();
     try {
-      const result = await api.convert({ slug: state.activeSlug });
+      const result = await api.convert({ slug: state.activeSlug, template: state.template });
       toast('导出成功: ' + result.path, 'success');
     } catch (err) {
       toast('导出失败: ' + err.message, 'error');
@@ -170,6 +175,19 @@
     state.darkMode = !state.darkMode;
     localStorage.setItem('ww.dark', state.darkMode ? 'true' : 'false');
     applyTheme();
+  }
+
+  function renderTemplateSelect() {
+    const sel = $('#template-select');
+    if (!sel) return;
+    sel.innerHTML = '';
+    for (const t of state.templates) {
+      const opt = document.createElement('option');
+      opt.value = t.name;
+      opt.textContent = `${t.name} — ${t.label || t.name}`;
+      if (t.name === state.template) opt.selected = true;
+      sel.appendChild(opt);
+    }
   }
 
   function applyTheme() {
@@ -198,12 +216,18 @@
     const exportBtn = $('#btn-convert');
     const darkToggle = $('#dark-toggle');
     const settingsBtn = $('#btn-settings');
+    const tplSelect = $('#template-select');
     const settingsModal = $('#settings-modal');
     const settingsClose = settingsModal ? settingsModal.querySelector('.modal-close') : null;
 
     if (publishBtn) publishBtn.addEventListener('click', publishCurrent);
     if (exportBtn) exportBtn.addEventListener('click', exportCurrent);
     if (darkToggle) darkToggle.addEventListener('click', toggleDark);
+    if (tplSelect) tplSelect.addEventListener('change', (e) => {
+      state.template = e.target.value;
+      localStorage.setItem('ww.template', state.template);
+      toast(`已切换模板：${state.template}`, 'success', 1500);
+    });
 
     if (settingsBtn) settingsBtn.addEventListener('click', () => {
       if (settingsModal) settingsModal.classList.add('is-open');
