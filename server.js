@@ -808,6 +808,146 @@ app.post('/api/generate-image', async (req, res) => {
   }
 });
 
+// ========== LLM Chat Endpoints ==========
+
+const LLM_API_KEY = () => process.env.LLM_API_KEY;
+const LLM_BASE_URL = () => process.env.LLM_BASE_URL || 'https://api.openai.com/v1';
+const LLM_MODEL = () => process.env.LLM_MODEL || 'gpt-4o-mini';
+
+app.post('/api/chat/stream', async (req, res) => {
+  try {
+    const { messages, skill } = req.body || {};
+    const apiKey = LLM_API_KEY();
+    if (!apiKey) {
+      return res.status(503).json({ error: 'LLM not configured — set LLM_API_KEY env var', code: 'LLM_NOT_CONFIGURED' });
+    }
+    const baseUrl = LLM_BASE_URL();
+    const model = LLM_MODEL();
+
+    const systemPrompts = {
+      chat: '你是一个有用的写作助手。请用中文回答。',
+      polish: '你是一个文字润色助手。请改进给定文本，保持原意不变。只返回润色后的文本，不要加解释。',
+      research: '你是一个研究助手。请围绕给定主题提供关键要点和见解，用要点列表形式返回。'
+    };
+
+    const sysContent = systemPrompts[skill] || systemPrompts.chat;
+    const allMessages = [{ role: 'system', content: sysContent }, ...(messages || [])];
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders();
+
+    const response = await fetch(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({ model, messages: allMessages, stream: true })
+    });
+
+    if (!response.ok) {
+      const errBody = await response.text().catch(() => '');
+      const msg = `LLM API error: ${response.status}${errBody ? ' - ' + errBody.slice(0,200) : ''}`;
+      res.write(`data: ${JSON.stringify({ error: msg })}\n\n`);
+      res.write('data: [DONE]\n\n');
+      res.end();
+      return;
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const data = line.slice(6).trim();
+        if (data === '[DONE]') continue;
+        try {
+          const parsed = JSON.parse(data);
+          const content = parsed.choices?.[0]?.delta?.content || '';
+          if (content) {
+            res.write(`data: ${JSON.stringify({ content })}\n\n`);
+          }
+        } catch (e) { /* skip malformed chunks */ }
+      }
+    }
+    res.write('data: [DONE]\n\n');
+    res.end();
+  } catch (err) {
+    console.error('[chat/stream]', err);
+    if (!res.headersSent) return res.status(503).json({ error: err.message });
+    try {
+      res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
+      res.write('data: [DONE]\n\n');
+      res.end();
+    } catch (_) { /* ignore */ }
+  }
+});
+
+app.post('/api/chat/skills/polish', async (req, res) => {
+  try {
+    const { text } = req.body || {};
+    if (!text) return res.status(400).json({ error: 'text required' });
+    const apiKey = LLM_API_KEY();
+    if (!apiKey) return res.status(503).json({ error: 'LLM not configured', code: 'LLM_NOT_CONFIGURED' });
+    const response = await fetch(`${LLM_BASE_URL()}/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: LLM_MODEL(),
+        messages: [
+          { role: 'system', content: '你是一个文字润色助手。改进给定文本，保持原意，只返回润色结果。' },
+          { role: 'user', content: text }
+        ]
+      })
+    });
+    if (!response.ok) {
+      const errBody = await response.text().catch(() => '');
+      return res.status(502).json({ error: `LLM API error: ${response.status}`, detail: errBody.slice(0,200) });
+    }
+    const data = await response.json();
+    const polished = data.choices?.[0]?.message?.content || text;
+    res.json({ ok: true, result: polished });
+  } catch (err) {
+    res.status(503).json({ error: err.message });
+  }
+});
+
+app.post('/api/chat/skills/research', async (req, res) => {
+  try {
+    const { topic } = req.body || {};
+    if (!topic) return res.status(400).json({ error: 'topic required' });
+    const apiKey = LLM_API_KEY();
+    if (!apiKey) return res.status(503).json({ error: 'LLM not configured', code: 'LLM_NOT_CONFIGURED' });
+    const response = await fetch(`${LLM_BASE_URL()}/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: LLM_MODEL(),
+        messages: [
+          { role: 'system', content: '你是一个研究助手。围绕给定主题提供关键要点，用编号列表返回，每行一个要点。' },
+          { role: 'user', content: topic }
+        ]
+      })
+    });
+    if (!response.ok) {
+      const errBody = await response.text().catch(() => '');
+      return res.status(502).json({ error: `LLM API error: ${response.status}`, detail: errBody.slice(0,200) });
+    }
+    const data = await response.json();
+    const result = data.choices?.[0]?.message?.content || '';
+    res.json({ ok: true, result });
+  } catch (err) {
+    res.status(503).json({ error: err.message });
+  }
+});
+
 app.get('/api/prompt-presets', (req, res) => {
   res.json({ presets: PROMPT_PRESETS });
 });
