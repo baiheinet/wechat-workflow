@@ -810,16 +810,16 @@ app.post('/api/generate-image', async (req, res) => {
 
 // ========== LLM Chat Endpoints ==========
 
-const LLM_API_KEY = () => process.env.LLM_API_KEY;
-const LLM_BASE_URL = () => process.env.LLM_BASE_URL || 'https://api.openai.com/v1';
-const LLM_MODEL = () => process.env.LLM_MODEL || 'gpt-4o-mini';
+const LLM_API_KEY = () => process.env.AGNES_API_KEY;
+const LLM_BASE_URL = () => 'https://apihub.agnes-ai.com/v1';
+const LLM_MODEL = () => 'agnes-text-2.1';
 
 app.post('/api/chat/stream', async (req, res) => {
   try {
     const { messages, skill } = req.body || {};
     const apiKey = LLM_API_KEY();
     if (!apiKey) {
-      return res.status(503).json({ error: 'LLM not configured — set LLM_API_KEY env var', code: 'LLM_NOT_CONFIGURED' });
+      return res.status(503).json({ error: 'AGNES not configured — set AGNES_API_KEY env var', code: 'AGNES_NOT_CONFIGURED' });
     }
     const baseUrl = LLM_BASE_URL();
     const model = LLM_MODEL();
