@@ -675,7 +675,7 @@ app.delete('/api/topics/:slug', async (req, res, next) => {
 
 app.post('/api/render', async (req, res, next) => {
   try {
-    const { content, template, slug } = req.body || {};
+    const { content, template, slug, mode } = req.body || {};
     if (typeof content !== 'string') {
       return res.status(400).json({ error: 'content must be a string' });
     }
@@ -688,6 +688,21 @@ app.post('/api/render', async (req, res, next) => {
     }
     const contentHtml = renderMarkdown(content, template);
     const fullHtml = buildArticleHtml(article, contentHtml);
+
+    if (mode === 'editor') {
+      const { marked } = require('marked');
+      const { loadTemplates } = require('./scripts/lib/templateLoader');
+      const templates = loadTemplates();
+      const tpl = templates[template] || templates[Object.keys(templates)[0]];
+      const rawHtml = marked.parse(content, { gfm: true, breaks: false });
+      const css = Object.entries(tpl.styles || {})
+        .map(([sel, style]) => {
+          const tag = sel === 'pre_code' ? 'pre code' : sel;
+          return `#editor-content ${tag} { ${style} }`;
+        }).join('\n');
+      return res.json({ ok: true, html: rawHtml, css, contentHtml });
+    }
+
     res.json({ ok: true, html: fullHtml, contentHtml });
   } catch (err) { next(err); }
 });

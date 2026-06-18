@@ -227,6 +227,9 @@
       state.template = e.target.value;
       localStorage.setItem('ww.template', state.template);
       toast(`已切换模板：${state.template}`, 'success', 1500);
+      if (state.activeSlug && window.WW.editor && window.WW.editor.reRender) {
+        window.WW.editor.reRender();
+      }
     });
 
     if (settingsBtn) settingsBtn.addEventListener('click', () => {

@@ -33,6 +33,7 @@
     updateTopic(slug, payload) { return this._fetch(`/api/topics/${encodeURIComponent(slug)}`, { method: 'PUT', body: JSON.stringify(payload) }); },
     deleteTopic(slug) { return this._fetch(`/api/topics/${encodeURIComponent(slug)}`, { method: 'DELETE' }); },
     listTemplates() { return this._fetch('/api/templates'); },
+    render(payload) { return this._fetch('/api/render', { method: 'POST', body: JSON.stringify(payload) }); },
     generateImage(payload) { return this._fetch('/api/generate-image', { method: 'POST', body: JSON.stringify(payload) }); },
     publish(payload) { return this._fetch('/api/publish', { method: 'POST', body: JSON.stringify(payload) }); },
     convert(payload) { return this._fetch('/api/convert', { method: 'POST', body: JSON.stringify(payload) }); },

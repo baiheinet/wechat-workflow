@@ -20,14 +20,45 @@
       return;
     }
     $('#editor-title').value = article.title || '';
-    $('#editor-content').innerHTML = mdToHtml(article.content || '');
     $('#editor-status').textContent = article.slug;
+    renderWithTemplate(article.content || '');
     dirty = false;
+  }
+
+  async function renderWithTemplate(md) {
+    const tpl = (state && state.template) || 'minimal';
+    try {
+      const result = await api.render({ content: md, template: tpl, mode: 'editor' });
+      if (result && result.html) {
+        $('#editor-content').innerHTML = result.html;
+        applyTemplateCss(result.css || '');
+        return;
+      }
+    } catch (err) { /* fall through */ }
+    $('#editor-content').innerHTML = mdToHtml(md);
+  }
+
+  function applyTemplateCss(css) {
+    let style = document.getElementById('editor-template-css');
+    if (!style) {
+      style = document.createElement('style');
+      style.id = 'editor-template-css';
+      document.head.appendChild(style);
+    }
+    style.textContent = css;
+  }
+
+  async function reRender() {
+    const html = $('#editor-content').innerHTML;
+    const md = htmlToMd(html);
+    await renderWithTemplate(md);
   }
 
   function getContent() {
     const el = $('#editor-content');
-    return htmlToMd(el.innerHTML);
+    const clone = el.cloneNode(true);
+    clone.querySelectorAll('[style]').forEach(n => n.removeAttribute('style'));
+    return htmlToMd(clone.innerHTML);
   }
 
   function markDirty() {
@@ -248,5 +279,5 @@
   }
 
   window.WW = window.WW || {};
-  window.WW.editor = { init, loadArticle, getContent, flushSave, markDirty, execFormat, insertImage, aiRewrite, insertAIImage, htmlToMd, mdToHtml };
+  window.WW.editor = { init, loadArticle, getContent, flushSave, markDirty, execFormat, insertImage, aiRewrite, insertAIImage, htmlToMd, mdToHtml, reRender };
 })();
