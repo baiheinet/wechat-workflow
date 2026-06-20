@@ -1,124 +1,158 @@
 # WeChat Workflow
 
-微信公众号写作全流程 Web 工作台：浏览器里写 Markdown → 实时预览 → 一键导出 / 推送到微信草稿箱 / AI 配图。所有密钥（微信 AppID/AppSecret、Agnes 配图 API Key）通过顶栏齿轮 → 设置面板统一管理，写入 `config.json`。
+微信公众号写作工作台。Notion 风格 WYSIWYG 编辑器 + 持久 AI 助理，一站式完成 **写作 → 排版 → 配图 → 润色 → 发布 → 复盘**。
 
-## 目录结构
+线上地址：https://wechat-workflow.vercel.app
+
+---
+
+## 功能
+
+- **WYSIWYG 编辑器**：所见即所得，编辑时即看到最终微信渲染效果
+- **三套排版模板**（minimal / tech / literary），顶栏一键切换，编辑器实时重渲染
+- **AI 助理**（右侧面板）：
+  - `/image <描述>` — AI 配图（封面 / 行内图）
+  - `/polish` — 润色选中文本（也可点浮动工具条的「✨ 重写」）
+  - `/research <主题>` — 资料搜集
+  - 多轮对话，SSE 流式输出，按文章分组持久化
+- **暗色模式**（顶栏 🌙 切换）
+- **文章管理**：左侧文档树，CRUD，自动保存（1.5s debounce）
+- **选题管理**：在文档树里创建/编辑/拖拽状态
+- **发布**：直接推微信草稿箱（未配凭据时降级为模拟）
+- **Vercel Blob 持久化**：所有数据存云端，冷启动不丢
+
+---
+
+## 架构
 
 ```
 wechat-workflow/
-├── articles/{drafts,ready,published}/   # 文章各阶段
-├── assets/{covers,images}/              # 素材文件（AI 生成图自动落在这里）
-├── templates/                           # 排版模板 (JSON)
-├── scripts/                             # 核心转换逻辑（CLI 与 Web 共享）
-│   ├── convert.js                       # CLI 入口
-│   ├── test.js                          # 冒烟测试
-│   ├── image-gen.js                     # CLI 生图入口
-│   └── lib/
-│       ├── markdownToHtml.js            # Markdown 解析
-│       ├── templateLoader.js            # 模板加载
-│       ├── imageHandler.js              # 图片处理
-│       ├── inlineStyles.js              # 内联样式注入
-│       ├── wechatApi.js                 # 微信 API 集成
-│       ├── imageGen.js                  # Agnes AI 配图
-│       └── convertWithImages.js         # 自动配图封装
-├── public/                              # Web 前端（无构建）
-│   ├── index.html
-│   ├── style.css
-│   └── app.js
-├── server.js                            # Web 后端（Express）
-├── api/index.js                         # Vercel 入口
-├── config.json                          # 配置文件（密钥保存到这里）
+├── server.js                # Express 后端：所有 API + Vercel 适配
+├── api/index.js             # Vercel serverless 入口（代理到 server.js）
+├── public/                  # 前端（无构建，纯静态）
+│   ├── index.html           # 三栏布局骨架
+│   ├── style.css            # design tokens（颜色/字体/间距）+ 暗色模式
+│   ├── app.js               # 初始化编排（主题、保存、发布、模板）
+│   ├── api.js               # API 客户端（含 SSE 流式 chat）
+│   ├── tree.js              # 文档树（articles + topics）
+│   ├── editor.js            # WYSIWYG contenteditable + 浮动工具条
+│   └── chat.js              # AI 助理面板
+├── templates/               # 排版模板（JSON，含 inline styles）
+│   ├── minimal.json
+│   ├── tech.json
+│   └── literary.json
+├── scripts/                 # CLI 共享底层（仍可用）
+│   ├── convert.js           # CLI: 转换单篇
+│   ├── test.js              # 冒烟测试
+│   └── lib/                 # 模板加载、markdown→html、WeChat API、AGNES 配图
+├── vercel.json              # Vercel 路由配置
+├── config.json              # 本地开发配置（Vercel 上忽略，env vars 优先）
 └── package.json
 ```
 
+---
+
 ## 快速开始
+
+### 本地开发
 
 ```bash
 npm install
-npm start            # 启动 Web 服务，监听 :3000
+npm start                   # 启动 Web 服务，监听 :3000
 ```
 
 浏览器访问 `http://localhost:3000`。
 
-### 第一件事：填写密钥
+CLI 仍然可用：
 
-顶栏右侧齿轮 → 设置面板 → 填写：
+```bash
+npm test                                    # 冒烟测试（必过）
+node scripts/convert.js path/to/post.md     # 转换单篇
+```
 
-| 字段 | 说明 |
-|------|------|
-| 微信公众号 AppID | 微信公众平台 → 开发 → 基本配置 |
-| 微信公众号 AppSecret | 同上 |
-| AI 配图密钥 | Agnes 平台 https://agnes-ai.com 申请（环境变量 `AGNES_API_KEY` 优先级更高） |
+### Vercel 部署
 
-保存即写入 `config.json`，下一次请求立即生效。微信凭据未配置时，「发布」会降级为模拟发布（写入 `articles/published/`）。
+推送到 GitHub main 分支即自动部署。Vercel 项目需配置：
+
+| 环境变量 | 说明 | 必填 |
+|---------|------|------|
+| `AGNES_API_KEY` | AGNES AI 统一 key（文本 + 图像），从 https://agnes-ai.com 申请 | 是 |
+| `WECHAT_APP_ID` | 微信公众号 AppID | 否（未配则发布降级模拟） |
+| `WECHAT_APP_SECRET` | 微信公众号 AppSecret | 否 |
+| `DEFAULT_TEMPLATE` | 默认模板（minimal/tech/literary），默认 `minimal` | 否 |
+| `IMAGE_STRATEGY` | 图片策略（local-keep/local-warn/cdn-replace），默认 `cdn-replace` | 否 |
+| `OUTPUT_DIR` | 导出目录，默认 `articles/ready` | 否 |
+
+> AGNES API 是 OpenAI 兼容协议，所以一个 key 既能调对话也能调生图。后端用 `https://apihub.agnes-ai.com/v1/chat/completions` 走对话，用 `/v1/images/generations` 走配图。
+
+### 持久化
+
+- **Vercel Blob**（推荐生产）：连接 Vercel 项目里的 Blob Store，OIDC 自动鉴权，所有文章/选题/图片/配置存云端
+- **本地 fs**：`articles/` 和 `assets/` 目录（仅开发用，Vercel 部署不持久）
+
+未配 Blob Store 时 `/api/articles` 等返回 503 明确错误，不静默 fallback。
+
+---
 
 ## REST API
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET  | `/api/health` | 健康检查 + 凭据配置摘要 |
-| GET  | `/api/config` | 读取配置（密钥字段脱敏返回） |
-| PUT  | `/api/config` | 更新配置（白名单字段） |
+| GET  | `/api/config` | 读取配置（密钥脱敏） |
+| PUT  | `/api/config` | 更新配置 |
 | GET  | `/api/templates` | 模板列表 |
-| GET  | `/api/articles` | 文章列表（按 `updatedAt` 倒序） |
-| GET  | `/api/articles/:slug` | 读取单篇（含正文） |
+| GET  | `/api/articles` | 文章列表（按 updatedAt 倒序） |
+| GET  | `/api/articles/:slug` | 读单篇（含正文） |
 | POST | `/api/articles` | 新建文章 |
-| PUT  | `/api/articles/:slug` | 更新文章（保存） |
+| PUT  | `/api/articles/:slug` | 更新文章 |
 | DELETE | `/api/articles/:slug` | 删除文章 |
-| POST | `/api/render` | 渲染 Markdown → HTML（预览用） |
-| POST | `/api/convert` | 导出 HTML 到 `articles/ready/` |
-| POST | `/api/publish` | 推送到微信草稿箱（未配凭据时模拟发布） |
-| POST | `/api/generate-image` | AI 生图（cover / inline） |
+| GET  | `/api/articles/:slug/assets` | 文章关联图片列表 |
+| GET  | `/api/topics` | 选题列表 |
+| GET  | `/api/topics/:slug` | 读单条 |
+| POST | `/api/topics` | 新建选题 |
+| PUT  | `/api/topics/:slug` | 更新选题 |
+| DELETE | `/api/topics/:slug` | 删除选题 |
+| GET  | `/api/topics/meta` | 选题元信息（状态/优先级枚举） |
+| POST | `/api/render` | 渲染 Markdown → HTML（`mode: 'editor'` 返回 WYSIWYG 模式 + CSS） |
+| POST | `/api/convert` | 导出 HTML 到 ready 目录 |
+| POST | `/api/publish` | 推微信草稿箱（未配凭据时模拟） |
+| POST | `/api/generate-image` | AI 配图（cover/inline） |
+| POST  | `/api/chat/stream` | AI 对话 SSE 流式（OpenAI 兼容协议） |
+| POST | `/api/chat/skills/polish` | 润色文本 |
+| POST | `/api/chat/skills/research` | 资料搜集 |
+| GET  | `/api/stats` | 数据复盘（阅读/分享/收藏） |
 
-### `PUT /api/config` 字段白名单
-
-```json
-{
-  "default_template": "minimal | tech | literary",
-  "output_dir": "articles/ready",
-  "image_strategy": "local-keep | local-warn | cdn-replace",
-  "wechat": { "app_id": "wx...", "app_secret": "..." },
-  "imageGen": {
-    "enabled": true,
-    "provider": "agnes",
-    "model": "agnes-image-2.1-flash",
-    "defaultSize": "1024x768",
-    "apiKey": "sk-..."
-  }
-}
-```
-
-未知字段返回 400；非法值（如 `image_strategy` 不在枚举内）返回 400 并附带原因。密钥字段在 `GET` 时以 `••••••••` 占位回显。
+---
 
 ## 排版模板
 
-| 模板名 | 风格 | 适用场景 |
-|--------|------|----------|
+`templates/<name>.json` 定义每套模板的 inline styles（h1-h4、p、strong、em、blockquote、code、pre、ul/ol/li、img、table 等）。
+
+| 模板名 | 风格 | 适用 |
+|--------|------|------|
 | minimal | 简约 | 通用文章 |
 | tech | 科技 | 技术文章 |
 | literary | 文艺 | 文学/随笔 |
 
-## CLI（仍可用）
+新增模板：复制一份 JSON 改 styles，重启服务即可（`/api/templates` 自动列出）。
 
-```bash
-node scripts/convert.js articles/drafts/my-post.md --template minimal
-node scripts/image-gen.js --cover "我的标题" --template tech
-AGNES_API_KEY=sk-xxx node scripts/image-gen.js --cover "标题" --desc "蓝色科技感"
-npm test                                # 冒烟测试
-```
-
-## Vercel 部署
-
-```bash
-vercel --yes
-```
-
-⚠️ Vercel 文件系统只读（运行时是 `/tmp`），文章和 `config.json` 不会持久保存——适合演示/分享。生产建议挂 Vercel KV 或用 Render/Railway 长驻型平台。
+---
 
 ## 快捷键
 
 - `Ctrl/Cmd + S` 保存
-- `Ctrl/Cmd + N` 新建文章
-- `Ctrl/Cmd + B` 加粗（在编辑器内）
-- `Ctrl/Cmd + I` 斜体（在编辑器内）
-- 右键文章项 → 删除
+
+---
+
+## 路线图
+
+- [x] Notion 风格 WYSIWYG 编辑器
+- [x] AI 助理面板（对话/润色/配图/资料）
+- [x] 模板实时切换
+- [x] 暗色模式
+- [x] 选题管理
+- [x] Vercel Blob 持久化
+- [ ] 多用户/权限
+- [ ] 协作编辑（实时同步）
+- [ ] 文章版本历史
