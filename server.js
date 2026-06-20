@@ -827,7 +827,7 @@ app.post('/api/generate-image', async (req, res) => {
 
 const LLM_API_KEY = () => process.env.AGNES_API_KEY;
 const LLM_BASE_URL = () => 'https://apihub.agnes-ai.com/v1';
-const LLM_MODEL = () => 'agnes-text-2.1';
+const LLM_MODEL = () => 'agnes-2.0-flash';
 
 app.post('/api/chat/stream', async (req, res) => {
   try {
